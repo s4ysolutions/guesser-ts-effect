@@ -1,0 +1,67 @@
+/* Same file in presentation-react and presentation-dom. Keep both identical. */
+main {
+  max-width: 44rem;
+  margin: 0 auto;
+  padding: 1rem;
+  font-family: system-ui, sans-serif;
+}
+
+.bit-buttons {
+  display: flex;
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+
+.bit-button {
+  flex: 1;
+  padding: 1.5rem 0;
+  font-size: 3rem;
+  cursor: pointer;
+}
+
+.history {
+  display: flex;
+  flex-wrap: nowrap;
+  gap: 2px;
+  overflow-x: auto;
+  margin: 1rem 0;
+  padding: 0;
+  list-style: none;
+}
+
+.history li {
+  flex: 0 0 auto;
+  min-width: 1.5rem;
+  padding: 0.25rem 0;
+  text-align: center;
+  font-family: ui-monospace, monospace;
+  border: 1px solid transparent;
+}
+
+/* Colour and a text marker, so the result does not depend on colour alone. */
+.history li.hit {
+  background: #d4f4dd;
+  border-color: #1b7f3b;
+}
+
+.history li.hit::after {
+  content: " \2713";
+}
+
+.history li.miss {
+  background: #fbd9d9;
+  border-color: #b3261e;
+}
+
+.history li.miss::after {
+  content: " \2717";
+}
+
+.history li.none {
+  background: #eee;
+  border-color: #999;
+}
+
+.history li.none::after {
+  content: " \00B7";
+}

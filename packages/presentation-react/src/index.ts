@@ -1,3 +1,4 @@
+import "./guess.css"
 export type { EffectRunner } from "./bridge/runner.ts"
 export { GuessProvider } from "./bridge/provider.tsx"
 export type { GuessUseCases } from "./bridge/provider.tsx"
