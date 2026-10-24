@@ -4,7 +4,7 @@ import { WINDOW_SIZE_MAX, WINDOW_SIZE_MIN } from "@guess/guesser-application"
 const text = (size: number | undefined): string => (size === undefined ? "" : String(size))
 
 /**
- * Edits N in a local draft. The value is sent when the field loses focus.
+ * Edits N in a local draft. The value is sent when the field loses focus (Enter also leaves the field).
  * Clamping and rounding belong to SetWindowSize, so any number is sent as typed.
  * An empty or non-numeric draft is dropped and the field goes back to the current size.
  */
@@ -33,6 +33,9 @@ export const WindowSizeInput = (props: {
         value={draft}
         onChange={(event) => setDraft(event.target.value)}
         onBlur={commit}
+        onKeyDown={(event) => {
+          if (event.key === "Enter") event.currentTarget.blur()
+        }}
       />
     </label>
   )

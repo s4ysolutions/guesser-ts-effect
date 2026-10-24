@@ -15,7 +15,8 @@ import { WindowSizeInput } from "./WindowSizeInput.tsx"
 const useBitKeys = (press: (bit: Bit) => void) => {
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.repeat || event.target instanceof HTMLInputElement) return
+      if (event.repeat || event.ctrlKey || event.metaKey || event.altKey) return
+      if (event.target instanceof HTMLInputElement) return
       if (event.key === "0") press(0)
       if (event.key === "1") press(1)
     }

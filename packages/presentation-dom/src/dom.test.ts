@@ -91,7 +91,7 @@ describe("guess screen", () => {
     const round: Round = { bit: 1, guess: 0, hit: false }
     fakes.rounds.push([round])
     await until(() => root.textContent?.includes(lastRoundText(round)) === true)
-    expect(root.querySelector("p")?.textContent).not.toBeNull()
+    expect([...root.querySelectorAll("p")].map((p) => p.textContent)).toContain(lastRoundText(round))
     unmount()
   })
 
@@ -125,6 +125,30 @@ describe("guess screen", () => {
     await until(() => fakes.pressBit.calls.length >= 2)
     await new Promise((resolve) => setTimeout(resolve, 20))
     expect(fakes.pressBit.calls.map((c) => c.bit)).toEqual([0, 1])
+    unmount()
+  })
+
+  it("keys with Ctrl, Meta or Alt do not press", async () => {
+    const { fakes, unmount } = await setup()
+    window.dispatchEvent(new KeyboardEvent("keydown", { key: "0", ctrlKey: true }))
+    window.dispatchEvent(new KeyboardEvent("keydown", { key: "0", metaKey: true }))
+    window.dispatchEvent(new KeyboardEvent("keydown", { key: "1", altKey: true }))
+    window.dispatchEvent(new KeyboardEvent("keydown", { key: "1" }))
+    await until(() => fakes.pressBit.calls.length >= 1)
+    await new Promise((resolve) => setTimeout(resolve, 20))
+    expect(fakes.pressBit.calls.map((c) => c.bit)).toEqual([1])
+    unmount()
+  })
+
+  it("Enter in the N field leaves the field and sends N", async () => {
+    const { fakes, root, unmount } = await setup()
+    const n = input(root)
+    n.focus()
+    n.value = "12"
+    n.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }))
+    await until(() => fakes.setWindowSize.calls.length === 1)
+    expect(fakes.setWindowSize.calls[0]?.n).toBe(12)
+    expect(document.activeElement).not.toBe(n)
     unmount()
   })
 

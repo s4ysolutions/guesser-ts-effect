@@ -71,6 +71,30 @@ describe("GuessScreen", () => {
     expect(fakes.pressBit.calls.map((call) => call.bit)).toEqual([0, 1])
   })
 
+  it("keys with Ctrl, Meta or Alt do not press", async () => {
+    const fakes = makeFakes()
+    renderWithFakes(<GuessScreen />, fakes)
+    fireEvent.keyDown(window, { key: "0", ctrlKey: true })
+    fireEvent.keyDown(window, { key: "0", metaKey: true })
+    fireEvent.keyDown(window, { key: "1", altKey: true })
+    fireEvent.keyDown(window, { key: "1" })
+    await waitFor(() => expect(fakes.pressBit.calls).toHaveLength(1))
+    await new Promise((resolve) => setTimeout(resolve, 20))
+    expect(fakes.pressBit.calls.map((call) => call.bit)).toEqual([1])
+  })
+
+  it("Enter in the N field leaves the field and sends N", async () => {
+    const fakes = makeFakes()
+    renderWithFakes(<GuessScreen />, fakes)
+    const input = screen.getByLabelText("Bits the guesser sees (N)")
+    input.focus()
+    fireEvent.change(input, { target: { value: "12" } })
+    fireEvent.keyDown(input, { key: "Enter" })
+    await waitFor(() => expect(fakes.setWindowSize.calls).toHaveLength(1))
+    expect(fakes.setWindowSize.calls[0]?.n).toBe(12)
+    expect(document.activeElement).not.toBe(input)
+  })
+
   it("the window size input sends the typed number on blur, out of range included", async () => {
     const fakes = makeFakes()
     renderWithFakes(<GuessScreen />, fakes)

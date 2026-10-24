@@ -82,7 +82,7 @@ const history = (state: DomRounds): HTMLElement => {
 const sizeText = (size: number | undefined): string => (size === undefined ? "" : String(size))
 
 /**
- * Edits N in the field. The value is sent when the field loses focus.
+ * Edits N in the field. The value is sent when the field loses focus (Enter also leaves the field).
  * Clamping and rounding belong to SetWindowSize, so any number is sent as typed.
  * An empty or non-numeric text is dropped. Afterwards the field shows the current size.
  */
@@ -92,6 +92,9 @@ const windowSizeField = (state: DomWindowSize): HTMLElement => {
   label.append("Bits the guesser sees (N)", input)
   input.value = sizeText(state.value)
   bind<number>(state, (size) => { input.value = sizeText(size) })
+  input.addEventListener("keydown", (event) => {
+    if (event.key === "Enter") input.blur()
+  })
   input.addEventListener("blur", () => {
     const n = Number(input.value)
     if (input.value.trim() !== "" && !Number.isNaN(n)) state.set(n)
@@ -127,7 +130,8 @@ export const mountGuessScreen = (root: HTMLElement, runner: EffectRunner, useCas
 
   // Keys 0 and 1 press a bit. Auto-repeat and typing in the N field do not.
   const onKeyDown = (event: KeyboardEvent) => {
-    if (event.repeat || event.target instanceof HTMLInputElement) return
+    if (event.repeat || event.ctrlKey || event.metaKey || event.altKey) return
+    if (event.target instanceof HTMLInputElement) return
     if (event.key === "0") rounds.press(0)
     if (event.key === "1") rounds.press(1)
   }
