@@ -1,0 +1,17 @@
+{
+  "name": "@guess/interaction-adapter-local-storage",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "test": "vitest run",
+    "typecheck": "tsc -p tsconfig.json"
+  },
+  "dependencies": {
+    "@guess/core": "workspace:*",
+    "@guess/interaction-domain": "workspace:*",
+    "effect": "4.0.6"
+  }
+}
