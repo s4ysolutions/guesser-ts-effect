@@ -108,6 +108,21 @@ importers:
         specifier: 4.0.6
         version: 4.0.6
 
+  packages/presentation-dom:
+    dependencies:
+      '@guess/core':
+        specifier: workspace:*
+        version: link:../core
+      '@guess/guesser-application':
+        specifier: workspace:*
+        version: link:../guesser/application
+      '@guess/interaction-application':
+        specifier: workspace:*
+        version: link:../interaction/application
+      effect:
+        specifier: 4.0.6
+        version: 4.0.6
+
   packages/presentation-react:
     dependencies:
       '@guess/core':
