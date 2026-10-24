@@ -1,0 +1,17 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "product-react",
+      "runtimeExecutable": "pnpm",
+      "runtimeArgs": ["--filter", "@guess/product-react", "exec", "vite", "--port", "5173", "--strictPort"],
+      "port": 5173
+    },
+    {
+      "name": "product-dom",
+      "runtimeExecutable": "pnpm",
+      "runtimeArgs": ["--filter", "@guess/product-dom", "exec", "vite", "--port", "5174", "--strictPort"],
+      "port": 5174
+    }
+  ]
+}
