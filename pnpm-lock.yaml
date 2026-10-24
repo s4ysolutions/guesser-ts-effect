@@ -84,6 +84,21 @@ importers:
         specifier: 4.0.6
         version: 4.0.6
 
+  packages/interaction/application:
+    dependencies:
+      '@guess/core':
+        specifier: workspace:*
+        version: link:../../core
+      '@guess/guesser-application':
+        specifier: workspace:*
+        version: link:../../guesser/application
+      '@guess/interaction-domain':
+        specifier: workspace:*
+        version: link:../domain
+      effect:
+        specifier: 4.0.6
+        version: 4.0.6
+
   packages/interaction/domain:
     dependencies:
       '@guess/core':
