@@ -1,0 +1,17 @@
+{
+  "name": "@guess/guesser-adapter-jev",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "test": "vitest run",
+    "typecheck": "tsc -p tsconfig.json"
+  },
+  "dependencies": {
+    "@guess/core": "workspace:*",
+    "@guess/guesser-domain": "workspace:*",
+    "effect": "4.0.6"
+  }
+}
