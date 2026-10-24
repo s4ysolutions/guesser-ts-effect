@@ -57,6 +57,6 @@ mountGuessScreen(root, runtime, {
 
 runtime.runFork(resumeGame(new ResumeGame()))
 
-window.addEventListener("pagehide", () => {
-  void runtime.dispose()
+window.addEventListener("pagehide", (event) => {
+  if (!event.persisted) void runtime.dispose()
 })

@@ -7,7 +7,7 @@ description: Use when writing or changing a product's main file that builds a Ma
 
 The product is the only place that knows concrete adapters. Idea: vocabla-mill `composition-root` (language-neutral). `ManagedRuntime` and the phase split are Effect specific. Products hold no business logic.
 
-## The real root (`packages/product-react/src/main.tsx`, the DOM one is the same)
+## The real root (`packages/product-react/src/main.tsx`, the DOM one has the same phases)
 
 ```ts
 // plain adapter
@@ -34,7 +34,7 @@ const pressBit = makePressBit({ roundsState, repository, takeGuess, requestGuess
 <GuessProvider runner={runtime} useCases={{ observeRounds, pressBit, /* ... */ }}>
 
 runtime.runFork(resumeGame(new ResumeGame()))      // first guess for loaded rounds
-window.addEventListener("pagehide", () => { void runtime.dispose() })
+window.addEventListener("pagehide", (event) => { if (!event.persisted) void runtime.dispose() })
 ```
 
 ## Adding a feature (for example `notes`)
@@ -52,7 +52,7 @@ window.addEventListener("pagehide", () => { void runtime.dispose() })
 2. **Phase 1 is effectful and scoped** (`when-to-use-layer`). Phase 2 is plain code: wrong argument = compile error.
 3. **Resolve tags once** (the `Effect.gen` above) and pass `…State` values into constructors. Use cases never see a tag.
 4. **The same runtime runs the bridge** (`runner={runtime}`); it fits `EffectRunner` structurally.
-5. **Dispose on `pagehide`**: it releases scopes and interrupts the guess fiber. `pagehide` also fires when the page enters the back/forward cache and the app would then be dead after "back". The products still dispose unconditionally (known gap); in new code dispose only when `!event.persisted`.
+5. **Dispose on `pagehide`**: it releases scopes and interrupts the guess fiber. `pagehide` also fires when the page enters the back/forward cache, and a disposed app would be dead after "back". So dispose only when `!event.persisted`.
 6. No error screen before mount: both Layers have error type `never`; the only failure is a defect, which shows in the console.
 7. Top-level `await` is fine in a Vite module product.
 
