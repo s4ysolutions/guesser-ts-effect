@@ -10,7 +10,6 @@
     "typecheck": "tsc -p tsconfig.json"
   },
   "dependencies": {
-    "@guess/core": "workspace:*",
     "@guess/interaction-domain": "workspace:*",
     "effect": "4.0.6"
   }
