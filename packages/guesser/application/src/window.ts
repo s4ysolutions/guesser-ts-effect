@@ -2,7 +2,8 @@ import { Data, Effect, Stream, SubscriptionRef } from "effect"
 import type { UseCase } from "@guess/core"
 import type { GuessState } from "./state.ts"
 import { clampWindowSize, saveWindowSize } from "./state.ts"
-import { RequestGuess } from "./request.ts"
+import type { RequestGuess } from "./request.ts"
+import { unlockedStartOf } from "./request.ts"
 
 export class SetWindowSize extends Data.TaggedClass("SetWindowSize")<{ readonly n: number }> {
   declare readonly "~response"?: Effect.Effect<void>
@@ -19,11 +20,19 @@ export const makeSetWindowSize = (deps: {
 (command) =>
   Effect.gen(function*() {
     if (Number.isNaN(command.n)) return
+    const start = unlockedStartOf(deps.requestGuess)
+    if (start === undefined) {
+      return yield* Effect.die("SetWindowSize needs a RequestGuess made by makeRequestGuess")
+    }
+    const { guessState } = deps
     const n = clampWindowSize(command.n)
-    yield* SubscriptionRef.set(deps.guessState.windowSize, n)
-    saveWindowSize(deps.guessState.storage, n)
-    const bits = yield* SubscriptionRef.get(deps.guessState.lastBits)
-    yield* deps.requestGuess(new RequestGuess({ bits }))
+    // One permit for set N, read bits and start: no RequestGuess can run in between.
+    yield* guessState.lock.withPermits(1)(Effect.gen(function*() {
+      yield* SubscriptionRef.set(guessState.windowSize, n)
+      saveWindowSize(guessState.storage, n)
+      const bits = yield* SubscriptionRef.get(guessState.lastBits)
+      yield* start(bits)
+    }))
   })
 
 export const makeObserveWindowSize = (deps: {

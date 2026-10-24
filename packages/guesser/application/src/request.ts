@@ -9,32 +9,47 @@ export class RequestGuess extends Data.TaggedClass("RequestGuess")<{ readonly bi
   declare readonly "~response"?: Effect.Effect<void>
 }
 
+type StartGuess = (bits: Bits) => Effect.Effect<void>
+
+// The unlocked body of RequestGuess. The caller must hold guessState.lock.
+// Internal: not exported from index.ts.
+const startGuess = (guessState: GuessState["Service"], gateway: GuessGateway) =>
+(bits: Bits): Effect.Effect<void> =>
+  Effect.gen(function*() {
+    yield* SubscriptionRef.set(guessState.lastBits, bits)
+    // Wait for the old guess fiber to exit, so it cannot write a stale result.
+    yield* FiberHandle.clear(guessState.fiber)
+    if (bits.length === 0) {
+      yield* SubscriptionRef.set(guessState.status, { _tag: "Idle" })
+      return
+    }
+    const n = yield* SubscriptionRef.get(guessState.windowSize)
+    yield* SubscriptionRef.set(guessState.status, { _tag: "Thinking" })
+    yield* FiberHandle.run(
+      guessState.fiber,
+      gateway.guess(lastN(bits, n)).pipe(
+        Effect.matchEffect({
+          onSuccess: (guess) => SubscriptionRef.set(guessState.status, { _tag: "Ready", guess }),
+          onFailure: (error) => SubscriptionRef.set(guessState.status, { _tag: "Failed", error }),
+        }),
+      ),
+    )
+  })
+
+// Lets SetWindowSize reach the unlocked body of the RequestGuess use case it was given.
+const unlockedStarts = new WeakMap<object, StartGuess>()
+
+export const unlockedStartOf = (requestGuess: UseCase<RequestGuess>): StartGuess | undefined =>
+  unlockedStarts.get(requestGuess)
+
 export const makeRequestGuess = (deps: {
   readonly guessState: GuessState["Service"]
   readonly gateway?: GuessGateway
 }): UseCase<RequestGuess> => {
   const { guessState } = deps
-  const gateway = deps.gateway ?? makeLongestMatchGateway()
-  return (command) =>
-    Effect.gen(function*() {
-      yield* SubscriptionRef.set(guessState.lastBits, command.bits)
-      // Wait for the old guess fiber to exit, so it cannot write a stale result.
-      yield* FiberHandle.clear(guessState.fiber)
-      if (command.bits.length === 0) {
-        yield* SubscriptionRef.set(guessState.status, { _tag: "Idle" })
-        return
-      }
-      const n = yield* SubscriptionRef.get(guessState.windowSize)
-      yield* SubscriptionRef.set(guessState.status, { _tag: "Thinking" })
-      // Running in the handle interrupts the previous guess.
-      yield* FiberHandle.run(
-        guessState.fiber,
-        gateway.guess(lastN(command.bits, n)).pipe(
-          Effect.matchEffect({
-            onSuccess: (guess) => SubscriptionRef.set(guessState.status, { _tag: "Ready", guess }),
-            onFailure: (error) => SubscriptionRef.set(guessState.status, { _tag: "Failed", error }),
-          }),
-        ),
-      )
-    })
+  const start = startGuess(guessState, deps.gateway ?? makeLongestMatchGateway())
+  const useCase: UseCase<RequestGuess> = (command) =>
+    guessState.lock.withPermits(1)(start(command.bits))
+  unlockedStarts.set(useCase, start)
+  return useCase
 }

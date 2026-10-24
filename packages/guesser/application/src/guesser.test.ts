@@ -205,3 +205,20 @@ test("leaving the layer scope interrupts a running guess", async () => {
   }))
   expect(interrupted).toBe(true)
 })
+
+test("concurrent requests and SetWindowSize end with the newest bits", () =>
+  run(Effect.gen(function*() {
+    const calls: Array<Bits> = []
+    const gateway: GuessGateway = {
+      guess: (b) => Effect.sync(() => (calls.push(b), { bit: 1 as Bit })),
+    }
+    const app = yield* setup(gateway)
+    yield* Effect.all([
+      app.requestGuess(new RequestGuess({ bits: bits(0, 1) })),
+      app.setWindowSize(new SetWindowSize({ n: 2 })),
+      app.requestGuess(new RequestGuess({ bits: bits(0, 1, 1) })),
+    ], { concurrency: "unbounded" })
+    yield* settle
+    expect(calls.at(-1)).toEqual([1, 1])
+    expect(yield* current(app)).toEqual({ _tag: "Ready" })
+  })))

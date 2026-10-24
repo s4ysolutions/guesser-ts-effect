@@ -1,4 +1,4 @@
-import { Context, Effect, FiberHandle, Layer, SubscriptionRef } from "effect"
+import { Context, Effect, FiberHandle, Layer, Semaphore, SubscriptionRef } from "effect"
 import type { Bits } from "@guess/core"
 import type { Guess, GuessFailed } from "@guess/guesser-domain"
 
@@ -49,6 +49,8 @@ export class GuessState extends Context.Service<GuessState, {
   readonly windowSize: SubscriptionRef.SubscriptionRef<number>
   readonly lastBits: SubscriptionRef.SubscriptionRef<Bits>
   readonly fiber: FiberHandle.FiberHandle<void, never>
+  // One permit: guess requests run one at a time (not re-entrant).
+  readonly lock: Semaphore.Semaphore
   readonly storage: Storage | undefined
 }>()("GuessState") {
   static layer(options?: { readonly storage?: Storage }): Layer.Layer<GuessState> {
@@ -61,7 +63,8 @@ export class GuessState extends Context.Service<GuessState, {
         const lastBits = yield* SubscriptionRef.make<Bits>([])
         // Released with the layer's scope: interrupts a running guess.
         const fiber = yield* FiberHandle.make<void, never>()
-        return { status, windowSize, lastBits, fiber, storage }
+        const lock = yield* Semaphore.make(1)
+        return { status, windowSize, lastBits, fiber, lock, storage }
       }),
     )
   }
