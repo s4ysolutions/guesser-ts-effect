@@ -16,8 +16,8 @@ export const makeResumeGame = (deps: {
 }): UseCase<ResumeGame> => {
   const { roundsState, requestGuess } = deps
   return () =>
-    Effect.gen(function*() {
+    roundsState.lock.withPermits(1)(Effect.gen(function*() {
       const current = yield* SubscriptionRef.get(roundsState.rounds)
       yield* requestGuess(new RequestGuess({ bits: bitsOf(current) }))
-    })
+    }))
 }

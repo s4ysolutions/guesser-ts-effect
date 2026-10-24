@@ -16,10 +16,10 @@ export const makeResetRounds = (deps: {
 }): UseCase<ResetRounds> => {
   const { roundsState, repository, requestGuess } = deps
   return () =>
-    Effect.gen(function*() {
+    roundsState.lock.withPermits(1)(Effect.gen(function*() {
       yield* SubscriptionRef.set(roundsState.rounds, [])
       yield* repository.save([])
       // An empty request interrupts a running guess and sets Idle.
       yield* requestGuess(new RequestGuess({ bits: [] }))
-    })
+    }))
 }

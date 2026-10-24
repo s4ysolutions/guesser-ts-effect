@@ -18,7 +18,7 @@ export const makePressBit = (deps: {
 }): UseCase<PressBit> => {
   const { roundsState, repository, takeGuess, requestGuess } = deps
   return (command) =>
-    Effect.gen(function*() {
+    roundsState.lock.withPermits(1)(Effect.gen(function*() {
       // The guess for this bit is the one made before the press.
       const guess = yield* takeGuess(new TakeGuess())
       const current = yield* SubscriptionRef.get(roundsState.rounds)
@@ -26,5 +26,5 @@ export const makePressBit = (deps: {
       yield* SubscriptionRef.set(roundsState.rounds, next)
       yield* repository.save(next)
       yield* requestGuess(new RequestGuess({ bits: bitsOf(next) }))
-    })
+    }))
 }
