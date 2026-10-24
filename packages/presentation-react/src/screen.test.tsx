@@ -71,14 +71,36 @@ describe("GuessScreen", () => {
     expect(fakes.pressBit.calls.map((call) => call.bit)).toEqual([0, 1])
   })
 
-  it("the window size input sends SetWindowSize on blur", async () => {
+  it("the window size input sends the typed number on blur, out of range included", async () => {
     const fakes = makeFakes()
     renderWithFakes(<GuessScreen />, fakes)
     const input = screen.getByLabelText("Bits the guesser sees (N)")
-    fireEvent.change(input, { target: { value: "10" } })
+    fireEvent.change(input, { target: { value: "300" } })
     fireEvent.blur(input)
     await waitFor(() => expect(fakes.setWindowSize.calls).toHaveLength(1))
-    expect(fakes.setWindowSize.calls[0]?.n).toBe(10)
+    expect(fakes.setWindowSize.calls[0]?.n).toBe(300)
+  })
+
+  it("an empty window size input sends nothing and shows the current size", async () => {
+    const fakes = makeFakes()
+    renderWithFakes(<GuessScreen />, fakes)
+    const input = screen.getByLabelText("Bits the guesser sees (N)") as HTMLInputElement
+    await waitFor(() => expect(input.value).toBe("8"))
+    fireEvent.change(input, { target: { value: "" } })
+    fireEvent.blur(input)
+    expect(fakes.setWindowSize.calls).toHaveLength(0)
+    expect(input.value).toBe("8")
+  })
+
+  it("the window size input shows the size that ObserveWindowSize emits", async () => {
+    const fakes = makeFakes()
+    renderWithFakes(<GuessScreen />, fakes)
+    const input = screen.getByLabelText("Bits the guesser sees (N)") as HTMLInputElement
+    fireEvent.change(input, { target: { value: "300" } })
+    fireEvent.blur(input)
+    await waitFor(() => expect(fakes.setWindowSize.calls).toHaveLength(1))
+    act(() => fakes.windowSize.push(256))
+    await waitFor(() => expect(input.value).toBe("256"))
   })
 
   it("shows the status, score and last round from the observed values", async () => {
