@@ -64,6 +64,9 @@ stay use cases.
 - A use case that is a factory (creates accessors/modifiers for the caller).
 - A class or object holding a group of use cases (`InteractionUseCases { press, reset, … }`).
   It hides each use case's real dependencies. One command ↔ one `UseCase<C>`.
+- A `Layer` (and a service tag) for a service that has a plain constructor and nothing to
+  release. Layers are constructors; they earn their place only for effectful creation or
+  resource lifetime (see 4.6).
 - The guesser port or domain mentions Jev, prompts, questions or API keys.
 
 ## 3. Constraints
@@ -91,12 +94,12 @@ packages/
                                      UseCaseCommand<Response>, UseCase<C>, ResponseOf<C>
   guesser/
     domain/                          GuessGateway port, Guess, GuessFailed
-    application/                     use cases + GuesserLive layer (creates longest-match)  ← self-contained
+    application/                     use case constructors + GuessState layer (creates longest-match)  ← self-contained
     adapter-longest-match/           in-process algorithm, used by products and tests
     adapter-jev/                     reference adapter: REST via fetch, not wired in any product
   interaction/
     domain/                          Round, Rounds, Score, RoundsRepository port
-    application/                     use cases + InteractionLive layer (needs RoundsRepository)  ← open
+    application/                     use case constructors + RoundsState layer (takes a RoundsRepository)  ← open
     adapter-local-storage/           RoundsRepository on local storage
   presentation-react/                React bridge (hooks) + components
   presentation-dom/                  DOM bridge (EventTarget) + DOM views
@@ -127,10 +130,10 @@ packages never import adapters. Nothing imports `guesser-adapter-jev` except its
 All state the UI shows lives in the application layers, not in presentation. Both UIs need
 the same state, so no presentation owns it.
 
-- Live state is an **internal Effect service** in the application layer: a
-  `Context.Service` holding a `SubscriptionRef`, built once by a `Layer`. It is not a port
-  and it is never exported. Use cases get it in their `Layer`, so it never shows up in a
-  type that another package sees.
+- Live state is an **Effect service** in the application layer: a `Context.Service` holding
+  a `SubscriptionRef`, built once by a `Layer` (its creation is effectful, see 4.6). It is
+  not a port. Its shape is internal: only the feature's own use case constructors read or
+  write the ref. The product sees it only as a value to pass into those constructors.
 - Saving and loading go through a **repository port** only where there is a real choice of
   technology (interaction). The live state loads from the repository at start and saves on
   change.
@@ -142,8 +145,8 @@ The same pattern as the vocabla-mill backend (`usecase-command` skill), mapped t
 - A **command** is plain data describing intent. It carries its response type.
 - A **use case** is a handler for exactly one command type: `UseCase<C>`.
 - Presentation (and other features) depend only on `UseCase<C>`. Dependencies (state
-  services, ports, other features' use cases) are taken in the use case's `Layer`, like
-  constructor injection, so they never appear in the use case's type.
+  services, ports, other features' use cases) are arguments of the use case's **plain
+  constructor function**, so they never appear in the use case's type.
 
 Core types (no Effect import):
 
@@ -164,16 +167,15 @@ Feature code:
 export class PressBit extends Data.TaggedClass("PressBit")<{ readonly bit: Bit }>
   implements UseCaseCommand<Effect.Effect<void>> {}
 
-export class PressBitUseCase
-  extends Context.Service<PressBitUseCase, UseCase<PressBit>>()("PressBitUseCase") {
-  static readonly layer = Layer.effect(this, Effect.gen(function* () {
-    const state = yield* RoundsState          // internal service
-    const repo = yield* RoundsRepository      // port
-    const takeGuess = yield* TakeGuessUseCase // other feature's use case
-    return (command) => /* … */
-  }))
-}
+export const makePressBit = (deps: {
+  readonly roundsState: RoundsState              // state service value
+  readonly repository: RoundsRepository          // port
+  readonly takeGuess: UseCase<TakeGuess>         // other feature's use cases
+  readonly requestGuess: UseCase<RequestGuess>
+}): UseCase<PressBit> => (command) => /* Effect.gen(…) */
 ```
+
+No tag and no `Layer` for use cases: they have a plain constructor and nothing to release.
 
 Two kinds of response:
 - **command**: `Effect<A, never>`.
@@ -181,9 +183,10 @@ Two kinds of response:
   `SubscriptionRef.changes` gives). Observe commands are named `ObserveX`.
 
 Rules:
-- One command ↔ one `UseCase<C>` service with its own `layer`, in one file.
-- A use case never creates accessors or modifiers for its caller (no factories).
-- The `R` of every response is `never`. All dependencies are taken in the `Layer`.
+- One command ↔ one `make…` constructor returning `UseCase<C>`, in one file with its command.
+- A use case never creates accessors or modifiers for its caller (no factories). Its
+  constructor is called once, by the composition root; callers get the finished `UseCase<C>`.
+- The `R` of every response is `never`. All dependencies are constructor arguments.
 - Responses that presentation runs have error type `never`. Failures become state that an
   observe use case shows (for example the guess status `failed(reason)`).
 - Each state has one owner feature. Only the owner's use cases write to it. Another feature
@@ -206,12 +209,13 @@ No `Rx`, `LiveValue` or `Command` type exists. `Stream` and `Effect` are already
 shapes. (An `Rx` grouping type was discussed and dropped: its only value was to stop two
 bridges from drifting, and the products are meant to be independent.)
 
-- Both bridges get use cases from the product's `ManagedRuntime` by their service tag
-  (`PressBitUseCase`) and call them with a command (`new PressBit({ bit })`).
-- **React**: a runtime provider (React context with the product's `ManagedRuntime`), two
-  generic helpers `useObserve(ObserveRoundsUseCase, new ObserveRounds())` (runs the `Stream`)
-  and `useRun(PressBitUseCase)` (returns `(command) => void`), and per-state custom hooks
-  built from them, e.g. `useRounds() → [rounds, { press, reset }]`.
+- The product passes the finished `UseCase<C>` values to the bridge explicitly, plus the
+  `ManagedRuntime` the bridge uses to **run** the Effects and Streams they return. Bridges
+  never look anything up by tag.
+- **React**: a provider (React context holding the runtime and the product's use cases), two
+  generic helpers `useObserve(observeRounds, new ObserveRounds())` (runs the `Stream`) and
+  `useRun(pressBit)` (returns `(command) => void`), and per-state custom hooks built from
+  them, e.g. `useRounds() → [rounds, { press, reset }]`.
 - **DOM**: the same idea with native events. Per state, an object that extends
   `EventTarget`, dispatches a `change` event (`CustomEvent` with the value in `detail`),
   has a `value` getter for the latest value, and has the command methods, e.g.
@@ -221,16 +225,53 @@ bridges from drifting, and the products are meant to be independent.)
 
 ### 4.5 Composition root (products)
 
-Each product:
-1. builds the Layer graph:
-   `GuesserLive` + `InteractionLive.pipe(Layer.provide(LocalStorageRoundsRepository))`.
-   Each feature's `…Live` merges the layers of all its use cases and its internal state
-   services, and exposes only the `…UseCase` services.
-2. creates one `ManagedRuntime` from it at start (all state services exist once),
-3. mounts its presentation with that runtime,
-4. disposes the runtime on page unload.
+Each product's root has two phases, and calls every constructor itself (no per-feature
+wiring function that returns a record of use cases):
 
-Products contain no business logic.
+```ts
+// plain adapters
+const repository = makeLocalStorageRoundsRepository()
+
+// phase 1 — effectful and scoped: only what 4.6 allows
+const runtime = ManagedRuntime.make(Layer.mergeAll(
+  GuessState.layer,
+  RoundsState.layer({ repository }),   // loads saved rounds at start
+))
+const { guessState, roundsState } = await runtime.runPromise(
+  Effect.all({ guessState: GuessState, roundsState: RoundsState }))
+
+// phase 2 — plain constructors, each called once
+const takeGuess    = makeTakeGuess({ guessState })
+const requestGuess = makeRequestGuess({ guessState })   // creates longest-match itself
+const pressBit     = makePressBit({ roundsState, repository, takeGuess, requestGuess })
+// … the other use cases
+
+mount(runtime, { pressBit, /* … */ })
+```
+
+Then: request the first guess, and dispose the runtime on page unload (this interrupts the
+guess fiber). Products contain no business logic.
+
+### 4.6 When to use a Layer
+
+A `Layer` is a constructor with memoization and a scope. Use one **only** when the service
+has effectful creation and/or owns a resource that must be released. Otherwise use a plain
+constructor function and pass values.
+
+In this app that leaves exactly two Layers:
+
+| Service | Effectful creation | Owns a resource | Layer |
+|---|---|---|---|
+| use cases (~9) | no | no | no |
+| `LocalStorageRoundsRepository`, `LongestMatchGateway`, `JevGateway` | no | no | no |
+| `RoundsState` | yes: `SubscriptionRef.make`, first `load` | no | yes |
+| `GuessState` | yes: `SubscriptionRef.make` | yes: background guess fiber, interrupted on dispose | yes |
+
+Ports are plain TS interfaces, not service tags. A Layer that needs a plain dependency takes
+it as a function argument (`RoundsState.layer({ repository })`), not through `R`.
+
+This goes against the common Effect habit of "a Layer for everything". The skill must state
+the rule and the reason, so the code does not read as "they did not know Layers".
 
 ## 5. Features
 
@@ -251,7 +292,8 @@ Products contain no business logic.
 **Application — internal state**
 - `GuessState`: `idle | thinking | ready(Guess) | failed(GuessFailed)`.
 - Window size N (how many last bits the gateway gets).
-- Both are internal services, never exported.
+- Both live in `GuessState` (one service, one `Layer`, owns the guess fiber). Its shape is
+  internal to guesser.
 
 **Application — use cases** (command → response)
 - `ObserveGuessStatus` → `Stream<GuessStatus>` — status **without the bit**
@@ -265,8 +307,9 @@ Products contain no business logic.
 - `SetWindowSize { n }` → `Effect<void>`, `ObserveWindowSize` → `Stream<number>`. Changing N
   interrupts a running guess, drops a ready one, and requests a new guess with the current
   bits.
-- `GuesserLive` exports only the `…UseCase` services. interaction gets `TakeGuessUseCase` and
-  `RequestGuessUseCase` in its use case layers.
+- Self-contained: `makeRequestGuess({ guessState, gateway? })` creates `LongestMatchGateway`
+  itself when `gateway` is not given. Products never pass it; tests pass a fake.
+- interaction gets `UseCase<TakeGuess>` and `UseCase<RequestGuess>` as constructor arguments.
 
 **Longest-match adapter (used by products)**
 The classic "longest suffix match" predictor (as in the Aaronson oracle):
@@ -304,11 +347,12 @@ its memory.
 - `ObserveRounds` → `Stream<Rounds>`
 - `ObserveScore` → `Stream<Score>` (derived from rounds)
 - `PressBit { bit }` → `Effect<void>`:
-  1. `TakeGuess` via guesser's `TakeGuessUseCase`,
+  1. `TakeGuess` via guesser's `UseCase<TakeGuess>`,
   2. append the round, save,
-  3. `RequestGuess` via guesser's `RequestGuessUseCase` with all bits.
+  3. `RequestGuess` via guesser's `UseCase<RequestGuess>` with all bits.
 - `ResetRounds` → `Effect<void>` — empties rounds, saves, status goes back to `idle`.
-- At start (in the rounds state layer): load rounds and request the first guess.
+- At start: `RoundsState.layer({ repository })` loads the saved rounds; the product then
+  requests the first guess.
 
 **Local-storage adapter**
 - Key `guess.rounds`. Decode with `Schema`. If decoding fails: start with empty rounds,
@@ -333,7 +377,7 @@ its memory.
 - Domain and longest-match: plain unit tests (score maths, `lastN`, the algorithm on known
   sequences: e.g. `0101010` → `1`, a repeated pattern is learned, fallback rules).
 - Application: Vitest with Effect, using a test `GuessGateway` (slow, failing, fixed) and an
-  in-memory `RoundsRepository` layer. Cover: press while thinking (old fiber interrupted,
+  in-memory `RoundsRepository` value. Cover: press while thinking (old fiber interrupted,
   round has no guess), failure becomes state, reset, change of N.
 - Local-storage adapter: round trip and the corrupt-data path.
 - Jev adapter: stubbed `fetch` (request shape, each error mapping, abort on interrupt).
@@ -347,15 +391,18 @@ Written after the code proves the practice, in `.claude/skills/`, using the
 
 - feature layout: domain / application / adapters / presentation / product with Effect
 - one package per layer and the allowed dependency table
-- use cases: Command + `UseCase<C>` in TS + Effect (phantom response type, one service per
-  command, dependencies in the `Layer`), observe (`Stream`) vs command (`Effect`), no
+- use cases: Command + `UseCase<C>` in TS + Effect (phantom response type, one constructor per
+  command, dependencies as constructor arguments), observe (`Stream`) vs command (`Effect`), no
   factories, errors become state
 - state in the application layer: internal `SubscriptionRef` service vs repository port
   (when a port is ceremony, when it is not)
 - adapter wiring: self-contained vs open feature, and the cost of each
 - gateway port with more than one adapter (local algorithm + remote reference adapter)
 - React bridge and DOM bridge (driving adapters)
-- composition root with `ManagedRuntime`
+- composition root with `ManagedRuntime`: two phases (Layers, then plain constructors),
+  every constructor called by the product
+- when a Layer earns its place (effectful creation, resource lifetime) and when a plain
+  constructor is enough
 - naming: words to avoid and why (ViewModel, Store, Service, View, Rx)
 
 Each skill says what is specific to TS/Effect and what is a language-neutral idea, and
@@ -388,5 +435,7 @@ points to the matching vocabla-mill skill where the idea came from.
 - Corrupt saved rounds → start empty, keep a copy.
 - DOM bridge uses `EventTarget` + `CustomEvent("change")` (meridian uses a hand-written
   emitter; you asked for native JS events).
-- How guesser is tested with a fake gateway while staying self-contained: the application
-  package also exports a layer builder that takes a `GuessGateway` layer, marked for tests.
+- How guesser is tested with a fake gateway while staying self-contained: an optional
+  `gateway` argument on `makeRequestGuess`, which products never pass.
+- Ports are plain interfaces; a Layer that needs one takes it as a function argument.
+- The product requests the first guess after phase 2 (not inside a Layer).
