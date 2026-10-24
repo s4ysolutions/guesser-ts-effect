@@ -62,6 +62,8 @@ stay use cases.
   `View` for a reactive value (sounds like a component). `Rx` was considered and dropped
   (see 4.4).
 - A use case that is a factory (creates accessors/modifiers for the caller).
+- A class or object holding a group of use cases (`InteractionUseCases { press, reset, … }`).
+  It hides each use case's real dependencies. One command ↔ one `UseCase<C>`.
 - The guesser port or domain mentions Jev, prompts, questions or API keys.
 
 ## 3. Constraints
@@ -85,7 +87,8 @@ One package per layer. Each `package.json` lists only the packages it may import
 
 ```
 packages/
-  core/                              shared kernel: Bit, Bits (+ "last N" helper)
+  core/                              shared kernel: Bit, Bits (+ "last N" helper),
+                                     UseCaseCommand<Response>, UseCase<C>, ResponseOf<C>
   guesser/
     domain/                          GuessGateway port, Guess, GuessFailed
     application/                     use cases + GuesserLive layer (creates longest-match)  ← self-contained
@@ -125,28 +128,73 @@ All state the UI shows lives in the application layers, not in presentation. Bot
 the same state, so no presentation owns it.
 
 - Live state is an **internal Effect service** in the application layer: a
-  `Context.Service` holding a `SubscriptionRef`, built once by a `Layer`. It is not a port.
-  Its tag may be exported only as an opaque type (see 5.2).
+  `Context.Service` holding a `SubscriptionRef`, built once by a `Layer`. It is not a port
+  and it is never exported. Use cases get it in their `Layer`, so it never shows up in a
+  type that another package sees.
 - Saving and loading go through a **repository port** only where there is a real choice of
   technology (interaction). The live state loads from the repository at start and saves on
   change.
 
-### 4.3 Use cases: one method, Effect API
+### 4.3 Use cases: Command + UseCase<C>
 
-A use case is one exported function. Two kinds:
+The same pattern as the vocabla-mill backend (`usecase-command` skill), mapped to TS + Effect.
 
-- **observe use case**: `observeX: Stream<X>`. Emits the current value first, then every
-  change (that is what `SubscriptionRef.changes` gives).
-- **command use case**: `doX: (input) => Effect<Out, never, R>`.
+- A **command** is plain data describing intent. It carries its response type.
+- A **use case** is a handler for exactly one command type: `UseCase<C>`.
+- Presentation (and other features) depend only on `UseCase<C>`. Dependencies (state
+  services, ports, other features' use cases) are taken in the use case's `Layer`, like
+  constructor injection, so they never appear in the use case's type.
+
+Core types (no Effect import):
+
+```ts
+declare const ResponseType: unique symbol
+export interface UseCaseCommand<Response> { readonly [ResponseType]?: Response }  // phantom
+export type ResponseOf<C> = C extends UseCaseCommand<infer R> ? R : never
+export interface UseCase<C extends UseCaseCommand<unknown>> { (command: C): ResponseOf<C> }
+```
+
+TS has no path-dependent types (Scala's `command.Response`), so the response type rides on a
+phantom type parameter. The exact encoding may change if TS needs it; the shape must stay:
+the command type alone fixes the response type.
+
+Feature code:
+
+```ts
+export class PressBit extends Data.TaggedClass("PressBit")<{ readonly bit: Bit }>
+  implements UseCaseCommand<Effect.Effect<void>> {}
+
+export class PressBitUseCase
+  extends Context.Service<PressBitUseCase, UseCase<PressBit>>()("PressBitUseCase") {
+  static readonly layer = Layer.effect(this, Effect.gen(function* () {
+    const state = yield* RoundsState          // internal service
+    const repo = yield* RoundsRepository      // port
+    const takeGuess = yield* TakeGuessUseCase // other feature's use case
+    return (command) => /* … */
+  }))
+}
+```
+
+Two kinds of response:
+- **command**: `Effect<A, never>`.
+- **observe**: `Stream<A>`. Emits the current value first, then every change (that is what
+  `SubscriptionRef.changes` gives). Observe commands are named `ObserveX`.
 
 Rules:
+- One command ↔ one `UseCase<C>` service with its own `layer`, in one file.
 - A use case never creates accessors or modifiers for its caller (no factories).
-- Commands that presentation calls have error type `never`. Failures become state that an
+- The `R` of every response is `never`. All dependencies are taken in the `Layer`.
+- Responses that presentation runs have error type `never`. Failures become state that an
   observe use case shows (for example the guess status `failed(reason)`).
-- Each state has one owner. Only the owner's commands write to it. Another feature changes
-  it only by calling the owner's command use cases.
-- Use cases that belong to one state live in one file (`rounds.ts` holds the rounds use
-  cases). The file is the grouping; there is no extra grouping type.
+- Each state has one owner feature. Only the owner's use cases write to it. Another feature
+  changes it only by calling the owner's use cases.
+- Use case files for one state sit in one folder (`rounds/` holds `PressBit`, `ResetRounds`,
+  `ObserveRounds`). The folder is the grouping; there is no grouping type.
+- Effect's `Request.TaggedClass` is **not** used: it is made for batching with resolvers and
+  its response is a value, not a `Stream`, so it gives a wrong hint.
+- Cost note (measured with Effect 4.0.6 on Node 24): creating an observe `Stream` is ~0.7 µs
+  (a lazy description). Each running subscriber costs ~6 KB and ~2 µs per update. Cost is per
+  subscriber, not per state, so no other observing API is needed.
 
 ### 4.4 Bridges (driving adapters)
 
@@ -158,8 +206,11 @@ No `Rx`, `LiveValue` or `Command` type exists. `Stream` and `Effect` are already
 shapes. (An `Rx` grouping type was discussed and dropped: its only value was to stop two
 bridges from drifting, and the products are meant to be independent.)
 
+- Both bridges get use cases from the product's `ManagedRuntime` by their service tag
+  (`PressBitUseCase`) and call them with a command (`new PressBit({ bit })`).
 - **React**: a runtime provider (React context with the product's `ManagedRuntime`), two
-  generic helpers `useStream(stream)` and `useCommand(command)`, and per-state custom hooks
+  generic helpers `useObserve(ObserveRoundsUseCase, new ObserveRounds())` (runs the `Stream`)
+  and `useRun(PressBitUseCase)` (returns `(command) => void`), and per-state custom hooks
   built from them, e.g. `useRounds() → [rounds, { press, reset }]`.
 - **DOM**: the same idea with native events. Per state, an object that extends
   `EventTarget`, dispatches a `change` event (`CustomEvent` with the value in `detail`),
@@ -172,7 +223,9 @@ bridges from drifting, and the products are meant to be independent.)
 
 Each product:
 1. builds the Layer graph:
-   `GuesserLive` + `InteractionLive.pipe(Layer.provide(LocalStorageRoundsRepository))`
+   `GuesserLive` + `InteractionLive.pipe(Layer.provide(LocalStorageRoundsRepository))`.
+   Each feature's `…Live` merges the layers of all its use cases and its internal state
+   services, and exposes only the `…UseCase` services.
 2. creates one `ManagedRuntime` from it at start (all state services exist once),
 3. mounts its presentation with that runtime,
 4. disposes the runtime on page unload.
@@ -198,23 +251,22 @@ Products contain no business logic.
 **Application — internal state**
 - `GuessState`: `idle | thinking | ready(Guess) | failed(GuessFailed)`.
 - Window size N (how many last bits the gateway gets).
-- The state service's tag is exported **as an opaque type only** (no public members), so
-  `interaction-application` can name it in the `R` of `takeGuess` / `requestGuess` and the
-  product can provide `GuesserLive`. Only guesser's own use cases read or write the
-  `SubscriptionRef` inside.
+- Both are internal services, never exported.
 
-**Application — use cases**
-- `observeGuessStatus: Stream<GuessStatus>` — status **without the bit**
+**Application — use cases** (command → response)
+- `ObserveGuessStatus` → `Stream<GuessStatus>` — status **without the bit**
   (`idle | thinking | ready | failed(reason)`), so the UI cannot show the guess before the
   press.
-- `requestGuess(bits: Bits): Effect<void>` — takes `lastN(N)`, starts the guess in a
+- `RequestGuess { bits }` → `Effect<void>` — takes `lastN(N)`, starts the guess in a
   background fiber, interrupts the previous one if it still runs. Does not wait. With zero
   bits it does nothing and the status stays `idle`.
-- `takeGuess: Effect<Guess | null>` — returns the ready guess and sets state to `idle`;
+- `TakeGuess` → `Effect<Guess | null>` — returns the ready guess and sets state to `idle`;
   `null` if not ready.
-- `setWindowSize(n): Effect<void>`, `observeWindowSize: Stream<number>`. Changing N
+- `SetWindowSize { n }` → `Effect<void>`, `ObserveWindowSize` → `Stream<number>`. Changing N
   interrupts a running guess, drops a ready one, and requests a new guess with the current
   bits.
+- `GuesserLive` exports only the `…UseCase` services. interaction gets `TakeGuessUseCase` and
+  `RequestGuessUseCase` in its use case layers.
 
 **Longest-match adapter (used by products)**
 The classic "longest suffix match" predictor (as in the Aaronson oracle):
@@ -248,15 +300,15 @@ its memory.
   `total` = all rounds, `ratio = hits / guessed` (0 when `guessed` is 0).
 - Port `RoundsRepository`: `load: Effect<Rounds>`, `save(rounds): Effect<void>`.
 
-**Application — use cases** (`rounds.ts`, `score.ts`)
-- `observeRounds: Stream<Rounds>`
-- `observeScore: Stream<Score>` (derived from rounds)
-- `pressBit(bit): Effect<void>`:
-  1. `takeGuess` from guesser,
+**Application — use cases** (folders `rounds/`, `score/`; command → response)
+- `ObserveRounds` → `Stream<Rounds>`
+- `ObserveScore` → `Stream<Score>` (derived from rounds)
+- `PressBit { bit }` → `Effect<void>`:
+  1. `TakeGuess` via guesser's `TakeGuessUseCase`,
   2. append the round, save,
-  3. `requestGuess` from guesser with all bits.
-- `resetRounds: Effect<void>` — empties rounds, saves, status goes back to `idle`.
-- At start: load rounds and request the first guess.
+  3. `RequestGuess` via guesser's `RequestGuessUseCase` with all bits.
+- `ResetRounds` → `Effect<void>` — empties rounds, saves, status goes back to `idle`.
+- At start (in the rounds state layer): load rounds and request the first guess.
 
 **Local-storage adapter**
 - Key `guess.rounds`. Decode with `Schema`. If decoding fails: start with empty rounds,
@@ -295,7 +347,9 @@ Written after the code proves the practice, in `.claude/skills/`, using the
 
 - feature layout: domain / application / adapters / presentation / product with Effect
 - one package per layer and the allowed dependency table
-- use cases: one method, observe vs command, no factories, errors become state
+- use cases: Command + `UseCase<C>` in TS + Effect (phantom response type, one service per
+  command, dependencies in the `Layer`), observe (`Stream`) vs command (`Effect`), no
+  factories, errors become state
 - state in the application layer: internal `SubscriptionRef` service vs repository port
   (when a port is ceremony, when it is not)
 - adapter wiring: self-contained vs open feature, and the cost of each
@@ -321,8 +375,8 @@ points to the matching vocabla-mill skill where the idea came from.
 - Effect 4.x, pnpm, Vite, Vitest, TypeScript for the DOM product too.
 - Package naming `@guess/...`.
 - The hidden-guess rule: guess status is visible, the bit is not, until the press.
-- `takeGuess` / `requestGuess` as the way interaction uses guesser; guesser's state tag is
-  exported as an opaque type.
+- `TakeGuess` / `RequestGuess` as the way interaction uses guesser.
+- Bridge helper names `useObserve` / `useRun`.
 - Default N = 32, allowed 1–256; N is kept by guesser in local storage (guesser is
   self-contained, so this is its own concern).
 - Longest-match details: most recent match wins; fallback = majority bit, tie → opposite of
