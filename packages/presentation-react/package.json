@@ -1,0 +1,25 @@
+{
+  "name": "@guess/presentation-react",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "test": "vitest run",
+    "typecheck": "tsc -p tsconfig.json"
+  },
+  "dependencies": {
+    "@guess/core": "workspace:*",
+    "@guess/guesser-application": "workspace:*",
+    "@guess/interaction-application": "workspace:*",
+    "effect": "4.0.6",
+    "react": "19.3.1",
+    "react-dom": "19.3.1"
+  },
+  "devDependencies": {
+    "@testing-library/react": "16.3.3",
+    "@types/react": "19.3.0",
+    "@types/react-dom": "19.3.0"
+  }
+}
