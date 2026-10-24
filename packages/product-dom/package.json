@@ -1,0 +1,22 @@
+{
+  "name": "@guess/product-dom",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "test": "vitest run --passWithNoTests",
+    "typecheck": "tsc -p tsconfig.json"
+  },
+  "dependencies": {
+    "@guess/guesser-application": "workspace:*",
+    "@guess/interaction-adapter-local-storage": "workspace:*",
+    "@guess/interaction-application": "workspace:*",
+    "@guess/presentation-dom": "workspace:*",
+    "effect": "4.0.6"
+  },
+  "devDependencies": {
+    "vite": "8.3.5"
+  }
+}
