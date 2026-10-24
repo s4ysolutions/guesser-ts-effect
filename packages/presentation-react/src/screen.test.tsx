@@ -92,6 +92,19 @@ describe("GuessScreen", () => {
     expect(input.value).toBe("8")
   })
 
+  it("after blur the N field shows the current size, even when the clamped value is unchanged", async () => {
+    const fakes = makeFakes()
+    renderWithFakes(<GuessScreen />, fakes)
+    const input = screen.getByLabelText("Bits the guesser sees (N)") as HTMLInputElement
+    act(() => fakes.windowSize.push(256))
+    await waitFor(() => expect(input.value).toBe("256"))
+    fireEvent.change(input, { target: { value: "300" } })
+    fireEvent.blur(input)
+    await waitFor(() => expect(fakes.setWindowSize.calls).toHaveLength(1))
+    expect(fakes.setWindowSize.calls[0]?.n).toBe(300)
+    expect(input.value).toBe("256")
+  })
+
   it("the window size input shows the size that ObserveWindowSize emits", async () => {
     const fakes = makeFakes()
     renderWithFakes(<GuessScreen />, fakes)

@@ -17,11 +17,9 @@ export const WindowSizeInput = (props: {
 
   const commit = () => {
     const n = Number(draft)
-    if (draft.trim() === "" || Number.isNaN(n)) {
-      setDraft(text(size))
-      return
-    }
-    onChange(n)
+    if (draft.trim() !== "" && !Number.isNaN(n)) onChange(n)
+    // Show the current size again. If the clamped value differs, ObserveWindowSize emits it and the sync above shows it.
+    setDraft(text(size))
   }
 
   return (
