@@ -48,6 +48,21 @@ importers:
         specifier: 4.0.6
         version: 4.0.6
 
+  packages/guesser/application:
+    dependencies:
+      '@guess/core':
+        specifier: workspace:*
+        version: link:../../core
+      '@guess/guesser-adapter-longest-match':
+        specifier: workspace:*
+        version: link:../adapter-longest-match
+      '@guess/guesser-domain':
+        specifier: workspace:*
+        version: link:../domain
+      effect:
+        specifier: 4.0.6
+        version: 4.0.6
+
   packages/guesser/domain:
     dependencies:
       '@guess/core':
