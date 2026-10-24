@@ -1,4 +1,7 @@
 export { RoundsState } from "./state.ts"
 export { makeObserveRounds, ObserveRounds } from "./rounds/observe-rounds.ts"
 export { makeObserveScore, ObserveScore } from "./score/observe-score.ts"
+export { makePressBit, PressBit } from "./rounds/press-bit.ts"
+export { makeResetRounds, ResetRounds } from "./rounds/reset-rounds.ts"
+export { makeResumeGame, ResumeGame } from "./resume.ts"
 export type { Round, Rounds, RoundsRepository, Score } from "@guess/interaction-domain"
