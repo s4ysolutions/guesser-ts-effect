@@ -5,7 +5,7 @@
   "scripts": {
     "test": "pnpm -r --workspace-concurrency=1 test",
     "typecheck": "pnpm -r typecheck",
-    "check:deps": "node -e \"const fs=require('fs');if(fs.existsSync('scripts/check-deps.mjs'))process.exit(require('child_process').spawnSync('node',['scripts/check-deps.mjs'],{stdio:'inherit'}).status??1)\"",
+    "check:deps": "node scripts/check-deps.mjs",
     "verify": "pnpm typecheck && pnpm test && pnpm check:deps"
   },
   "devDependencies": {
