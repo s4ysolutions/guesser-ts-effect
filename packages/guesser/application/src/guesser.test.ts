@@ -221,7 +221,7 @@ test("concurrent requests and SetWindowSize end with the newest bits", () =>
       app.requestGuess(new RequestGuess({ bits: bits(0, 1, 1) })),
     ], { concurrency: "unbounded" })
     yield* Effect.sleep("30 millis")
-    
+
     expect(calls.at(-1)).toEqual([1, 1])
     expect(yield* current(app)).toEqual({ _tag: "Ready" })
   })))

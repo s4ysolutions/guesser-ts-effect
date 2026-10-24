@@ -17,25 +17,24 @@ export class ObserveWindowSize extends Data.TaggedClass("ObserveWindowSize")<{}>
 export const makeSetWindowSize = (deps: {
   readonly guessState: GuessState["Service"]
   readonly gateway?: GuessGateway
-}): UseCase<SetWindowSize> =>
-{
+}): UseCase<SetWindowSize> => {
   const { guessState } = deps
   const gateway = deps.gateway ?? makeLongestMatchGateway()
   return (command) =>
-  Effect.gen(function*() {
-    if (Number.isNaN(command.n)) return
-    const n = clampWindowSize(command.n)
-    // One permit for set N, read bits and start: no RequestGuess can run in between.
-    yield* guessState.lock.withPermits(1)(Effect.gen(function*() {
-      yield* SubscriptionRef.set(guessState.windowSize, n)
-      saveWindowSize(guessState.storage, n)
-      const bits = yield* SubscriptionRef.get(guessState.lastBits)
-      yield* startGuess(guessState, gateway, bits)
-    }))
-  })
+    Effect.gen(function*() {
+      if (Number.isNaN(command.n)) return
+      const n = clampWindowSize(command.n)
+      // One permit for set N, read bits and start: no RequestGuess can run in between.
+      yield* guessState.lock.withPermits(1)(Effect.gen(function*() {
+        yield* SubscriptionRef.set(guessState.windowSize, n)
+        saveWindowSize(guessState.storage, n)
+        const bits = yield* SubscriptionRef.get(guessState.lastBits)
+        yield* startGuess(guessState, gateway, bits)
+      }))
+    })
 }
 
 export const makeObserveWindowSize = (deps: {
   readonly guessState: GuessState["Service"]
 }): UseCase<ObserveWindowSize> =>
-() => SubscriptionRef.changes(deps.guessState.windowSize)
+  () => SubscriptionRef.changes(deps.guessState.windowSize)

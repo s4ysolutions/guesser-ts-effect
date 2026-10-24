@@ -17,7 +17,7 @@
 // }
 // Jev's API rejects browser CORS calls, so this adapter is a reference. No product uses it.
 import { Effect } from "effect"
-import { bitsToString, isBit } from "@guess/core"
+import { bitsToString } from "@guess/core"
 import type { Bits } from "@guess/core"
 import { BadAnswer, Timeout, Unavailable } from "@guess/guesser-domain"
 import type { Guess, GuessFailed, GuessGateway } from "@guess/guesser-domain"
@@ -49,7 +49,7 @@ const parseGuess = (json: unknown): Guess | BadAnswer => {
   const answer = answers?.[QUESTION_ID] as { choice?: unknown; confidence?: unknown } | undefined
   if (answer === undefined || answer === null) return new BadAnswer({ message: "No answer in response" })
   const bit = answer.choice === "0" ? 0 : answer.choice === "1" ? 1 : undefined
-  if (bit === undefined || !isBit(bit)) return new BadAnswer({ message: "Choice is not 0 or 1" })
+  if (bit === undefined) return new BadAnswer({ message: "Choice is not 0 or 1" })
   return typeof answer.confidence === "number" ? { bit, confidence: answer.confidence } : { bit }
 }
 
