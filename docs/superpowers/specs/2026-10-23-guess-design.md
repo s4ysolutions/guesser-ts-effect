@@ -321,11 +321,11 @@ The classic "longest suffix match" predictor (as in the Aaronson oracle):
    on a tie, guess the opposite of the last bit. No `confidence`.
 4. Never fails.
 
-Pure function plus a thin `Layer`. It searches only inside the bits it gets, so N limits
+A pure `predict` function and a plain constructor, `makeLongestMatchGateway()`. It searches only inside the bits it gets, so N limits
 its memory.
 
 **Jev adapter (reference, not wired)**
-- Config: `{ apiKey, baseUrl }` passed into its `Layer`. No key store, no UI.
+- Config: `{ apiKey, baseUrl }` passed to the plain constructor `makeJevGateway(config)`. No key store, no UI.
 - Sends `state` = the bits as a string, one **Choice** question ("which bit comes next")
   with options `"0"` and `"1"`, model `jev-latest`.
 - Maps `choice` → `bit`, `confidence` → `confidence`.
