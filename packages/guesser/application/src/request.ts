@@ -18,8 +18,9 @@ export const makeRequestGuess = (deps: {
   return (command) =>
     Effect.gen(function*() {
       yield* SubscriptionRef.set(guessState.lastBits, command.bits)
+      // Wait for the old guess fiber to exit, so it cannot write a stale result.
+      yield* FiberHandle.clear(guessState.fiber)
       if (command.bits.length === 0) {
-        yield* FiberHandle.clear(guessState.fiber)
         yield* SubscriptionRef.set(guessState.status, { _tag: "Idle" })
         return
       }
