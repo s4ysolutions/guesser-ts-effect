@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react"
+import { WINDOW_SIZE_MAX, WINDOW_SIZE_MIN } from "@guess/guesser-application"
 
 const text = (size: number | undefined): string => (size === undefined ? "" : String(size))
 
@@ -27,6 +28,8 @@ export const WindowSizeInput = (props: {
       Bits the guesser sees (N)
       <input
         type="number"
+        min={WINDOW_SIZE_MIN}
+        max={WINDOW_SIZE_MAX}
         value={draft}
         onChange={(event) => setDraft(event.target.value)}
         onBlur={commit}

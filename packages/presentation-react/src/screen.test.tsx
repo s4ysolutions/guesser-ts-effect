@@ -81,6 +81,13 @@ describe("GuessScreen", () => {
     expect(fakes.setWindowSize.calls[0]?.n).toBe(300)
   })
 
+  it("the window size input has min 1 and max 256", () => {
+    renderWithFakes(<GuessScreen />)
+    const input = screen.getByLabelText("Bits the guesser sees (N)")
+    expect(input.getAttribute("min")).toBe("1")
+    expect(input.getAttribute("max")).toBe("256")
+  })
+
   it("an empty window size input sends nothing and shows the current size", async () => {
     const fakes = makeFakes()
     renderWithFakes(<GuessScreen />, fakes)
