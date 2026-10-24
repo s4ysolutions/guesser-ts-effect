@@ -19,11 +19,9 @@ A name is a promise about shape and lifetime. Idea from vocabla-mill `frontend-s
 ## Rules for this stack
 
 - State class: `<Thing>State` (`RoundsState`), a `Context.Service`. DOM wrapper: `Dom<Thing>` (`DomRounds`). React hook: `use<Thing>` (`useRounds`).
-- Command class and use case maker share one stem: `PressBit` and `makePressBit`. Do not add `Handler` or `UseCase` to either.
+- Command class and use case maker share one stem: `PressBit` and `makePressBit` (`make<Command>`). Do not add `Handler` or `UseCase` to either.
 - A stream is named by its observe command (`ObserveRounds`), never by a type like `RoundsRx`.
-- `Service` is only Effect's `Context.Service`, used by `GuessState` and `RoundsState`.
-
 - Commands are verbs (`PressBit`, `ResetRounds`); observe commands start with `Observe`.
-- Make functions are `make<Command>`; the class and the maker share the stem.
 - A name with a contrast word ("experienced", "simple") says nothing; say what is true.
-- Two types may not share a name across layers; alias on import if needed (`import type { RequestGuess as RequestGuessCommand }` where a value and a type clash).
+- Two types may not share a name across layers. A class is both a value and a type, so one import is enough: do not alias it.
+- One deliberate exception: `EffectRunner` and `GuessUseCases` are declared in both presentations. The two products must stay independent, so they do not import from each other.

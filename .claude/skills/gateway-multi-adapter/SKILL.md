@@ -28,7 +28,7 @@ Nothing about algorithms or services. The port stays async (`Effect`) even thoug
 
 **It is not wired into any product, because of CORS**: a browser page cannot call that API directly, and an API key must not ship in a browser bundle. It stays as proof the port fits a second technology. Only its own tests import it (`package-per-layer`).
 
-Config can carry more than the key: a `timeoutMs` and a `fetch` function (default `globalThis.fetch`) make the timeout and abort tests possible. Mapping 429 to `Unavailable` is a choice: callers need only "no answer now", and there is no retry. `Timeout` comes from `Effect.timeout`; the fiber interrupt aborts the request through `AbortSignal`. Enforcement of "only its own tests import `adapter-jev`" is the table in `package-per-layer`.
+Config can carry more than the key: a `timeoutMs` and a `fetch` function (default `globalThis.fetch`) make the timeout and abort tests possible. Mapping 429 to `Unavailable` is a choice: callers need only "no answer now", and there is no retry. `Timeout` comes from `Effect.timeoutOrElse`; the fiber interrupt aborts the request through `AbortSignal`. Enforcement of "only its own tests import `adapter-jev`" is the table in `package-per-layer`.
 
 ## Rules
 

@@ -68,6 +68,7 @@ Both bridges fork every command separately. Two fast presses run in parallel. Co
 - The bridge sends what the user typed (`SetWindowSize({ n: 300 })`); the logic clamps. Drop only input that is not a number.
 - Each presentation keeps its own copy of the use-case interface and copy strings. Products stay independent; the grouping ("press and reset change rounds") is written in each bridge.
 - No `Rx`, `LiveValue`, `Command` or `Store` type.
+- `GuessUseCases` is a record of finished `UseCase<C>` values that the product passes to the bridge. It is not the "object that holds a group of use cases" we avoid: it hides no dependencies (each use case was built in the product, with its own arguments) and it is the bridge's input, not a logic type.
 - Known gaps: `useObserve` ignores a changed command; `useRun` fibers outlive unmount; a stream defect is silent.
 
 ## Red flags

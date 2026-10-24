@@ -3,7 +3,6 @@ import type { UseCase } from "@guess/core"
 import { RequestGuess } from "@guess/guesser-application"
 import type { RoundsRepository } from "@guess/interaction-domain"
 import type { RoundsState } from "../state.ts"
-import type { RequestGuess as RequestGuessCommand } from "@guess/guesser-application"
 
 export class ResetRounds extends Data.TaggedClass("ResetRounds")<{}> {
   declare readonly "~response"?: Effect.Effect<void>
@@ -12,7 +11,7 @@ export class ResetRounds extends Data.TaggedClass("ResetRounds")<{}> {
 export const makeResetRounds = (deps: {
   readonly roundsState: RoundsState["Service"]
   readonly repository: RoundsRepository
-  readonly requestGuess: UseCase<RequestGuessCommand>
+  readonly requestGuess: UseCase<RequestGuess>
 }): UseCase<ResetRounds> => {
   const { roundsState, repository, requestGuess } = deps
   return () =>

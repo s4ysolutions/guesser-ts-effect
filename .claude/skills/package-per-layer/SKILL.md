@@ -24,10 +24,9 @@ Idea from vocabla-mill `layers-to-modules` and `module-separation` (one build mo
 - **No build step.** `exports` points at the `.ts` source; other packages and Vite read it.
 - `tsconfig.json` extends `tsconfig.base.json`. Sources and tests are in `src/`.
 - **Type-only packages (no tests): `"test": "vitest run --passWithNoTests"`.** Plain `vitest run` exits with an error when it finds no tests and breaks root `pnpm test`.
-- A package that reads `localStorage` in tests needs a vitest config with `environment: "jsdom"` (`interaction/application`).
-
+- A package that reads `localStorage` in tests needs a vitest config with `environment: "jsdom"` (`interaction/application`, `guesser/application`).
 - Test tools (`vitest`, `jsdom`) are `devDependencies` or come from the root; the check ignores dev dependencies. Put `vitest.config.ts` in the package root, not in `src/`.
-- "Type-only" means the package has no test files (`guesser/domain`, `core` types).
+- "Type-only" means the package has no test files (`guesser/domain`). `core` is not type-only: it has tests.
 - A new package (also a new feature's `<feature>-application`) has no wildcard rule: add its own row to `allowed` in `scripts/check-deps.mjs`, then its directory is picked up by pnpm's workspace glob.
 
 ## Allowed dependencies (`scripts/check-deps.mjs`)

@@ -4,7 +4,6 @@ import { RequestGuess, TakeGuess } from "@guess/guesser-application"
 import { bitsOf, makeRound } from "@guess/interaction-domain"
 import type { RoundsRepository } from "@guess/interaction-domain"
 import type { RoundsState } from "../state.ts"
-import type { RequestGuess as RequestGuessCommand, TakeGuess as TakeGuessCommand } from "@guess/guesser-application"
 
 export class PressBit extends Data.TaggedClass("PressBit")<{ readonly bit: Bit }> {
   declare readonly "~response"?: Effect.Effect<void>
@@ -13,8 +12,8 @@ export class PressBit extends Data.TaggedClass("PressBit")<{ readonly bit: Bit }
 export const makePressBit = (deps: {
   readonly roundsState: RoundsState["Service"]
   readonly repository: RoundsRepository
-  readonly takeGuess: UseCase<TakeGuessCommand>
-  readonly requestGuess: UseCase<RequestGuessCommand>
+  readonly takeGuess: UseCase<TakeGuess>
+  readonly requestGuess: UseCase<RequestGuess>
 }): UseCase<PressBit> => {
   const { roundsState, repository, takeGuess, requestGuess } = deps
   return (command) =>

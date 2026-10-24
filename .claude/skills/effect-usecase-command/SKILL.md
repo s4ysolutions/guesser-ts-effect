@@ -31,8 +31,8 @@ export class PressBit extends Data.TaggedClass("PressBit")<{ readonly bit: Bit }
 export const makePressBit = (deps: {
   readonly roundsState: RoundsState["Service"]
   readonly repository: RoundsRepository
-  readonly takeGuess: UseCase<TakeGuessCommand>
-  readonly requestGuess: UseCase<RequestGuessCommand>
+  readonly takeGuess: UseCase<TakeGuess>
+  readonly requestGuess: UseCase<RequestGuess>
 }): UseCase<PressBit> => {
   const { roundsState, repository, takeGuess, requestGuess } = deps
   return (command) =>
