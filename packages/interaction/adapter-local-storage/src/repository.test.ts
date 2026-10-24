@@ -11,6 +11,7 @@ beforeEach(() => {
 })
 
 afterEach(() => {
+  vi.unstubAllGlobals()
   vi.restoreAllMocks()
 })
 
@@ -47,5 +48,26 @@ describe("makeLocalStorageRoundsRepository", () => {
       Effect.runPromise(repository().save([makeRound(1, 1)])),
     ).resolves.toBeUndefined()
     expect(console.warn).toHaveBeenCalledTimes(1)
+  })
+
+  test("a storage whose getItem throws loads as [] and does not fail", async () => {
+    vi.spyOn(Storage.prototype, "getItem").mockImplementation(() => {
+      throw new Error("access denied")
+    })
+    expect(await Effect.runPromise(repository().load)).toEqual([])
+    expect(console.warn).toHaveBeenCalledTimes(1)
+  })
+
+  test("with no localStorage global, creating the repository does not throw and load/save do not fail", async () => {
+    vi.stubGlobal("localStorage", undefined)
+    let repo: ReturnType<typeof makeLocalStorageRoundsRepository> | undefined
+    expect(() => {
+      repo = makeLocalStorageRoundsRepository()
+    }).not.toThrow()
+    expect(await Effect.runPromise(repo!.load)).toEqual([])
+    await expect(
+      Effect.runPromise(repo!.save([makeRound(1, 1)])),
+    ).resolves.toBeUndefined()
+    expect(console.warn).toHaveBeenCalledTimes(2)
   })
 })

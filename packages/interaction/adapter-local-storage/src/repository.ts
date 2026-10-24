@@ -16,17 +16,16 @@ const RoundsJson = Schema.fromJsonString(Schema.Array(RoundSchema))
 
 const decodeRounds = Schema.decodeUnknownResult(RoundsJson)
 
-export const makeLocalStorageRoundsRepository = (
-  storage: Storage = globalThis.localStorage,
-): RoundsRepository => ({
+export const makeLocalStorageRoundsRepository = (storage?: Storage): RoundsRepository => ({
   load: Effect.sync((): Rounds => {
     try {
-      const raw = storage.getItem(ROUNDS_KEY)
+      const target = storage ?? globalThis.localStorage
+      const raw = target.getItem(ROUNDS_KEY)
       if (raw === null) return []
       const decoded = decodeRounds(raw)
       if (Result.isSuccess(decoded)) return decoded.success
       console.warn("guess: saved rounds are unreadable, starting empty")
-      storage.setItem(CORRUPT_KEY, raw)
+      target.setItem(CORRUPT_KEY, raw)
       return []
     } catch (error) {
       console.warn("guess: could not read saved rounds", error)
@@ -36,7 +35,8 @@ export const makeLocalStorageRoundsRepository = (
   save: (rounds) =>
     Effect.sync(() => {
       try {
-        storage.setItem(ROUNDS_KEY, JSON.stringify(rounds))
+        const target = storage ?? globalThis.localStorage
+        target.setItem(ROUNDS_KEY, JSON.stringify(rounds))
       } catch (error) {
         console.warn("guess: could not save rounds", error)
       }
