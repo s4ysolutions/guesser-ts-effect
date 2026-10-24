@@ -39,7 +39,7 @@ const setup = (gateway: GuessGateway) =>
     return {
       requestGuess,
       takeGuess: makeTakeGuess({ guessState }),
-      setWindowSize: makeSetWindowSize({ guessState, requestGuess }),
+      setWindowSize: makeSetWindowSize({ guessState, gateway }),
       status: makeObserveGuessStatus({ guessState }),
       windowSize: makeObserveWindowSize({ guessState }),
     }
@@ -210,15 +210,18 @@ test("concurrent requests and SetWindowSize end with the newest bits", () =>
   run(Effect.gen(function*() {
     const calls: Array<Bits> = []
     const gateway: GuessGateway = {
-      guess: (b) => Effect.sync(() => (calls.push(b), { bit: 1 as Bit })),
+      // Sleeps, so a running guess makes the next request wait in FiberHandle.clear.
+      guess: (b) => Effect.sleep("2 millis").pipe(Effect.map(() => (calls.push(b), { bit: 1 as Bit }))),
     }
     const app = yield* setup(gateway)
+    yield* app.requestGuess(new RequestGuess({ bits: bits(1) }))
     yield* Effect.all([
       app.requestGuess(new RequestGuess({ bits: bits(0, 1) })),
       app.setWindowSize(new SetWindowSize({ n: 2 })),
       app.requestGuess(new RequestGuess({ bits: bits(0, 1, 1) })),
     ], { concurrency: "unbounded" })
-    yield* settle
+    yield* Effect.sleep("30 millis")
+    
     expect(calls.at(-1)).toEqual([1, 1])
     expect(yield* current(app)).toEqual({ _tag: "Ready" })
   })))
