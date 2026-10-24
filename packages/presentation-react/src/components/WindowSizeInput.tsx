@@ -1,0 +1,40 @@
+import { useEffect, useState } from "react"
+import { WINDOW_SIZE_MAX, WINDOW_SIZE_MIN } from "@guess/guesser-application"
+
+const text = (size: number | undefined): string => (size === undefined ? "" : String(size))
+
+/**
+ * Edits N in a local draft. The value is sent when the field loses focus.
+ * An invalid or unchanged value is dropped and the field goes back to the current size.
+ */
+export const WindowSizeInput = (props: {
+  readonly size: number | undefined
+  readonly onChange: (n: number) => void
+}) => {
+  const { size, onChange } = props
+  const [draft, setDraft] = useState(text(size))
+  useEffect(() => setDraft(text(size)), [size])
+
+  const commit = () => {
+    const n = Number(draft)
+    if (Number.isInteger(n) && n >= WINDOW_SIZE_MIN && n <= WINDOW_SIZE_MAX && n !== size) {
+      onChange(n)
+    } else {
+      setDraft(text(size))
+    }
+  }
+
+  return (
+    <label>
+      Bits the guesser sees (N)
+      <input
+        type="number"
+        min={WINDOW_SIZE_MIN}
+        max={WINDOW_SIZE_MAX}
+        value={draft}
+        onChange={(event) => setDraft(event.target.value)}
+        onBlur={commit}
+      />
+    </label>
+  )
+}
