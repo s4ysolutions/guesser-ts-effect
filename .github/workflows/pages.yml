@@ -1,0 +1,71 @@
+name: Deploy demo to GitHub Pages
+
+# Builds both products and publishes them as one static site: React at the root, plain DOM
+# under /dom/. There is no backend: everything runs in the visitor's browser.
+# Requires Settings -> Pages -> Source: "GitHub Actions".
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+env:
+  BASE: /${{ github.event.repository.name }}/
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Verify
+        run: pnpm verify
+
+      - name: Build React product
+        run: pnpm --filter @guess/product-react exec vite build --base "$BASE"
+
+      - name: Build DOM product
+        run: pnpm --filter @guess/product-dom exec vite build --base "${BASE}dom/"
+
+      - name: Assemble site
+        run: |
+          mkdir site
+          cp -r packages/product-react/dist/. site/
+          mkdir site/dom
+          cp -r packages/product-dom/dist/. site/dom/
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
