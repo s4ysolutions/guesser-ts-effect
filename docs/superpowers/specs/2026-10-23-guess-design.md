@@ -34,11 +34,14 @@ stay use cases.
 - Logic (domain + application) is pure Effect code and knows nothing about any UI.
 - Two independent presentations and two products: React, and DOM without a framework.
   Both show the same screen.
-- Two features that show two ways to wire adapters:
-  - **guesser — self-contained**: its application layer creates its own adapter
-    (longest-match).
-  - **interaction — open**: its application layer only declares a repository port; the
-    product creates the adapter (local storage) and passes it in.
+- Every rule is in the domain package. Application only carries out the rules (see the
+  `hexagonal-layering` skill).
+- One feature, `guesser`, that shows two ways to wire adapters:
+  - **gateway — self-contained**: the application layer creates the adapter
+    (longest-match) itself.
+  - **repositories — open**: the application layer only declares the repository ports
+    (`RoundsRepository`, `WindowSizeRepository`); the product creates the adapters (local
+    storage) and passes them in.
 - Architecture is checked by the build: a wrong import fails to compile.
 - A set of skills in `.claude/skills/` that describe the proven practices.
 
@@ -53,6 +56,8 @@ stay use cases.
 
 **Anti-goals (the project fails even if it works, if…)**
 - A presentation package owns game state, or calls an adapter directly.
+- A business rule (a limit, a default, a status move, what the UI may see) sits in
+  application or presentation instead of domain.
 - React components or DOM views see Effect types (`Effect`, `Stream`, `Layer`). Effect
   stops at the bridge.
 - A "God object" per feature appears (a view-model-like object with all state and all
@@ -62,7 +67,7 @@ stay use cases.
   `View` for a reactive value (sounds like a component). `Rx` was considered and dropped
   (see 4.4).
 - A use case that is a factory (creates accessors/modifiers for the caller).
-- A class or object holding a group of use cases (`InteractionUseCases { press, reset, … }`).
+- A class or object holding a group of use cases (`GuesserUseCases { press, reset, … }`).
   It hides each use case's real dependencies. One command ↔ one `UseCase<C>`.
 - A `Layer` (and a service tag) for a service that has a plain constructor and nothing to
   release. Layers are constructors; they earn their place only for effectful creation or
@@ -90,53 +95,80 @@ One package per layer. Each `package.json` lists only the packages it may import
 
 ```
 packages/
-  core/                              shared kernel: Bit, Bits (+ "last N" helper),
-                                     UseCaseCommand<Response>, UseCase<C>, ResponseOf<C>
-  guesser/
-    domain/                          GuessGateway port, Guess, GuessFailed
-    application/                     use case constructors + GuessState layer (creates longest-match)  ← self-contained
-    adapter-longest-match/           in-process algorithm, used by products and tests
-    adapter-jev/                     reference adapter: REST via fetch, not wired in any product
-  interaction/
-    domain/                          Round, Rounds, Score, RoundsRepository port
-    application/                     use case constructors + RoundsState layer (takes a RoundsRepository)  ← open
-    adapter-local-storage/           RoundsRepository on local storage
-  presentation-react/                React bridge (hooks) + components
-  presentation-dom/                  DOM bridge (EventTarget) + DOM views
-  product-react/                     Vite app, composition root
-  product-dom/                       Vite app, composition root
+  core/                                 @guess/core
+                                        shared kernel: Bit, Bits (+ "last N" helper),
+                                        UseCaseCommand<Response>, UseCase<C>, ResponseOf<C>
+  features/guesser/
+    logic/
+      domain/                           @guess/guesser-domain
+                                        every rule, the types the rules use, and the ports
+                                        (GuessGateway, RoundsRepository, WindowSizeRepository)
+      application/                      @guess/guesser-application
+                                        use case constructors + GuessState and RoundsState
+                                        layers (creates longest-match)  ← gateway self-contained,
+                                        repositories open
+      adapter-longest-match/            @guess/guesser-adapter-longest-match
+                                        in-process algorithm, used by products and tests
+      adapter-jev/                      @guess/guesser-adapter-jev
+                                        reference adapter: REST via fetch, not wired in any product
+      adapter-local-storage/            @guess/guesser-adapter-local-storage
+                                        RoundsRepository and WindowSizeRepository on local storage
+    presentation/
+      state/                            @guess/guesser-state
+                                        UI-only logic shared by both toolkits (see 5.3)
+      browser-react/                    @guess/guesser-browser-react
+                                        React bridge (hooks) + components
+      browser-dom/                      @guess/guesser-browser-dom
+                                        DOM bridge (EventTarget) + DOM views
+  product-react/                        @guess/product-react: Vite app, composition root
+  product-dom/                          @guess/product-dom: Vite app, composition root
 ```
 
-Package names: `@guess/<path-with-dashes>`, e.g. `@guess/guesser-application`.
+Package names: `@guess/guesser-<folder>` for the feature, for example
+`@guess/guesser-application`. `core` is `@guess/core`, products are `@guess/product-react`
+and `@guess/product-dom`.
 
 Allowed dependencies (arrow = "may import"):
 
 ```
-core            ← every package
-*-domain        → core, effect
-guesser-application     → guesser-domain, guesser-adapter-longest-match, core
-interaction-application → interaction-domain, guesser-application (use cases only), core
-adapter-*       → its feature's domain, core
-presentation-*  → *-application (use cases only), core, effect (bridge only)
-product-*       → presentation-*, *-application, adapter-* it wires
+guesser-domain              → core, effect
+guesser-adapter-*           → guesser-domain, core, effect
+guesser-application         → guesser-domain, guesser-adapter-longest-match, core, effect
+guesser-state               → guesser-application, core, effect
+guesser-browser-react       → guesser-state, guesser-application, core, effect, react, react-dom
+guesser-browser-dom         → guesser-state, guesser-application, core, effect
+product-react               → guesser-browser-react, guesser-state, guesser-application,
+                              guesser-adapter-local-storage, core, effect, react, react-dom
+product-dom                 → guesser-browser-dom, guesser-state, guesser-application,
+                              guesser-adapter-local-storage, core, effect
 ```
 
 `guesser-application → guesser-adapter-longest-match` breaks the strict hexagon rule on
-purpose. It is the cost of option "self-contained", and the skills must say so. Domain
+purpose. It is the cost of the self-contained gateway, and the skills must say so. Domain
 packages never import adapters. Nothing imports `guesser-adapter-jev` except its own tests.
+`guesser-application` re-exports the types and constants that `guesser-state`, the browsers
+and the products need (for example `Rounds`, `Score`, `WINDOW_SIZE_MIN`), so they do not
+import the domain package.
 
 ### 4.2 Where state lives
 
-All state the UI shows lives in the application layers, not in presentation. Both UIs need
-the same state, so no presentation owns it.
+Game state that the UI shows lives in logic/application, not in presentation. Both UIs need
+the same state, so no presentation owns it. The rules about that state are in domain.
+Only UI-only logic is in presentation/state.
 
 - Live state is an **Effect service** in the application layer: a `Context.Service` holding
   a `SubscriptionRef`, built once by a `Layer` (its creation is effectful, see 4.6). It is
   not a port. Its shape is internal: only the feature's own use case constructors read or
   write the ref. The product sees it only as a value to pass into those constructors.
-- Saving and loading go through a **repository port** only where there is a real choice of
-  technology (interaction). The live state loads from the repository at start and saves on
-  change.
+- The rules for this state are **domain functions**: limits and defaults, clamping the window
+  size, the allowed moves of the guess status, what the UI may see. They take values and
+  return values. Application reads the state, calls them and writes the result.
+- Saving and loading go through a **repository port** declared in domain. The live state
+  loads from the repository at start and saves on change. There are two ports:
+  `RoundsRepository` and `WindowSizeRepository`. The window size is saved through
+  `WindowSizeRepository`; `GuessState` has no storage of its own.
+- **UI-only state** is in presentation/state: the history length and the window size draft
+  (5.3). It holds nothing the game needs to keep working.
 
 ### 4.3 Use cases: Command + UseCase<C>
 
@@ -144,9 +176,13 @@ The same pattern as the vocabla-mill backend (`usecase-command` skill), mapped t
 
 - A **command** is plain data describing intent. It carries its response type.
 - A **use case** is a handler for exactly one command type: `UseCase<C>`.
-- Presentation (and other features) depend only on `UseCase<C>`. Dependencies (state
-  services, ports, other features' use cases) are arguments of the use case's **plain
-  constructor function**, so they never appear in the use case's type.
+- The UI layers (presentation/state and the toolkit packages) depend only on `UseCase<C>`.
+  Dependencies (state services, ports, other use cases) are arguments of the use case's
+  **plain constructor function**, so they never appear in the use case's type.
+- The **use case body** has exactly these parts: read the state, call a domain function,
+  write the state, call ports. Every `if` that chooses a business outcome is a domain
+  function that takes values and returns the outcome. Guards about the machinery stay in
+  application: a lock, a cancelled fiber, skipping a stale result.
 
 Core types (no Effect import):
 
@@ -170,10 +206,14 @@ export class PressBit extends Data.TaggedClass("PressBit")<{ readonly bit: Bit }
 export const makePressBit = (deps: {
   readonly roundsState: RoundsState              // state service value
   readonly repository: RoundsRepository          // port
-  readonly takeGuess: UseCase<TakeGuess>         // other feature's use cases
+  readonly takeGuess: UseCase<TakeGuess>         // other use cases
   readonly requestGuess: UseCase<RequestGuess>
 }): UseCase<PressBit> => (command) => /* Effect.gen(…) */
 ```
+
+The body of `makePressBit` follows the shape above: take the guess (a use case), call the
+domain function that appends the round, write `roundsState`, save through the repository,
+request the next guess.
 
 No tag and no `Layer` for use cases: they have a plain constructor and nothing to release.
 
@@ -187,12 +227,15 @@ Rules:
 - A use case never creates accessors or modifiers for its caller (no factories). Its
   constructor is called once, by the composition root; callers get the finished `UseCase<C>`.
 - The `R` of every response is `never`. All dependencies are constructor arguments.
-- Responses that presentation runs have error type `never`. Failures become state that an
+- Responses that a UI runs have error type `never`. Failures become state that an
   observe use case shows (for example the guess status `failed(reason)`).
-- Each state has one owner feature. Only the owner's use cases write to it. Another feature
-  changes it only by calling the owner's use cases.
-- Use case files for one state sit in one folder (`rounds/` holds `PressBit`, `ResetRounds`,
-  `ObserveRounds`). The folder is the grouping; there is no grouping type.
+- Each state has one owner. Only the owner's use cases write to it. A use case of another
+  state changes it only by calling the owner's use cases (`PressBit` calls `TakeGuess` and
+  `RequestGuess`).
+- Use case files for one state sit in one folder. The application folders are `guess/`
+  (state, request, take, status, window size), `rounds/` (state, `PressBit`, `ResetRounds`,
+  `ObserveRounds`, resume) and `score/`. The folder is the grouping; there is no grouping
+  type.
 - Effect's `Request.TaggedClass` is **not** used: it is made for batching with resolvers and
   its response is a value, not a `Stream`, so it gives a wrong hint.
 - Cost note (measured with Effect 4.0.6 on Node 24): creating an observe `Stream` is ~0.7 µs
@@ -201,9 +244,13 @@ Rules:
 
 ### 4.4 Bridges (driving adapters)
 
-The bridges are Effect-aware. They turn use cases into a presentation-specific API. The
-grouping ("press and reset change rounds") is written in each bridge separately. This is
-wanted: each presentation is independent and may expose a different subset.
+The bridges are Effect-aware. They live in `guesser-browser-react` and `guesser-browser-dom`
+and turn use cases into a toolkit-specific API. The grouping ("press and reset change
+rounds") is written in each bridge separately. This is wanted: each toolkit package is
+independent and may expose a different subset. The logic both toolkits need (history length,
+window size draft, screen texts, the history cell class, which key presses a bit) is not in the
+bridges; it is in `guesser-state` (5.3). A bridge reads its own event, calls the function from
+`guesser-state`, and acts on the answer. Each toolkit still adds and removes its own listener.
 
 No `Rx`, `LiveValue` or `Command` type exists. `Stream` and `Effect` are already those
 shapes. (An `Rx` grouping type was discussed and dropped: its only value was to stop two
@@ -231,19 +278,27 @@ wiring function that returns a record of use cases):
 ```ts
 // plain adapters
 const repository = makeLocalStorageRoundsRepository()
+const windowSizeRepository = makeLocalStorageWindowSizeRepository()
 
 // phase 1 — effectful and scoped: only what 4.6 allows
 const runtime = ManagedRuntime.make(Layer.mergeAll(
-  GuessState.layer,
-  RoundsState.layer({ repository }),   // loads saved rounds at start
+  GuessState.layer({ windowSizeRepository }),   // loads the saved window size at start
+  RoundsState.layer({ repository }),            // loads saved rounds at start
+  WindowSizeDraftState.layer(),                 // from guesser-state; the draft starts empty
 ))
-const { guessState, roundsState } = await runtime.runPromise(
-  Effect.all({ guessState: GuessState, roundsState: RoundsState }))
+const { guessState, roundsState, draftState } = await runtime.runPromise(
+  Effect.gen(function* () {
+    return { guessState: yield* GuessState, roundsState: yield* RoundsState, draftState: yield* WindowSizeDraftState }
+  }))
 
 // phase 2 — plain constructors, each called once
 const takeGuess    = makeTakeGuess({ guessState })
 const requestGuess = makeRequestGuess({ guessState })   // creates longest-match itself
 const pressBit     = makePressBit({ roundsState, repository, takeGuess, requestGuess })
+const setWindowSize = makeSetWindowSize({ guessState, windowSizeRepository })   // gateway: also longest-match by default
+const observeWindowSize = makeObserveWindowSize({ guessState })
+const observeWindowSizeDraft = makeObserveWindowSizeDraft({ draftState, observeWindowSize })
+const commitWindowSizeDraft = makeCommitWindowSizeDraft({ draftState, setWindowSize })
 // … the other use cases
 
 mount(runtime, { pressBit, /* … */ })
@@ -258,14 +313,15 @@ A `Layer` is a constructor with memoization and a scope. Use one **only** when t
 has effectful creation and/or owns a resource that must be released. Otherwise use a plain
 constructor function and pass values.
 
-In this app that leaves exactly two Layers:
+In this app that leaves exactly three Layers:
 
 | Service | Effectful creation | Owns a resource | Layer |
 |---|---|---|---|
-| use cases (~9) | no | no | no |
-| `LocalStorageRoundsRepository`, `LongestMatchGateway`, `JevGateway` | no | no | no |
+| use cases | no | no | no |
+| `LocalStorageRoundsRepository`, `LocalStorageWindowSizeRepository`, `LongestMatchGateway`, `JevGateway` | no | no | no |
 | `RoundsState` | yes: `SubscriptionRef.make`, first `load` | no | yes |
-| `GuessState` | yes: `SubscriptionRef.make` | yes: background guess fiber, interrupted on dispose | yes |
+| `GuessState` | yes: `SubscriptionRef.make`, first window size `load` | yes: background guess fiber, interrupted on dispose | yes |
+| `WindowSizeDraftState` | yes: `SubscriptionRef.make` | no | yes |
 
 Ports are plain TS interfaces, not service tags. A Layer that needs a plain dependency takes
 it as a function argument (`RoundsState.layer({ repository })`), not through `R`.
@@ -279,7 +335,9 @@ the rule and the reason, so the code does not read as "they did not know Layers"
 - `Bit = 0 | 1`.
 - `Bits`: an immutable list of bits with `lastN(n)` and `toString()` (`"0110…"`).
 
-### 5.2 guesser (self-contained)
+### 5.2 guesser
+
+One feature. The gateway is self-contained; the repositories are open (see 2).
 
 **Domain**
 - `Guess = { bit: Bit; confidence?: number }` (`confidence` 0..1, optional so an adapter
@@ -288,28 +346,60 @@ the rule and the reason, so the code does not read as "they did not know Layers"
 - Port `GuessGateway`: `guess(lastBits: Bits) => Effect<Guess, GuessFailed>`. Nothing about
   any algorithm or service. The port stays async (`Effect`) even though the main adapter is
   instant, so a remote adapter fits without change.
+- Guess status rules (`guess-status`). The internal union `GuessProgress` is
+  `idle | thinking | ready(Guess) | failed(GuessFailed)`. The public `GuessStatus` is the
+  same without the bit. Pure functions give:
+  - the progress for a new request: no bits gives `idle`, otherwise `thinking`;
+  - the progress after a success and after a failure;
+  - taking the guess: the guess and the next progress, or `null` and the same progress;
+  - `publicStatus(progress)`, which drops the bit, so a UI cannot show the guess before
+    the press.
+- Window size rules (`window-size`): `WINDOW_SIZE_DEFAULT` (32), `WINDOW_SIZE_MIN` (1),
+  `WINDOW_SIZE_MAX` (256), `clampWindowSize`, `isWindowSize`. Port `WindowSizeRepository`:
+  `load: Effect<number>`, `save(n): Effect<void>`.
+- `Round = { bit: Bit; guess: Bit | null; hit: boolean | null }` (`null` = no guess was ready).
+  A pure function appends a new round to `Rounds`.
+- `Rounds`: ordered list of rounds.
+- `Score = { hits, guessed, total, unguessed, ratio }`: `guessed` = rounds with a guess,
+  `total` = all rounds, `unguessed = total - guessed` (computed in `scoreOf`), `ratio = hits / guessed` (0 when `guessed` is 0).
+- Port `RoundsRepository`: `load: Effect<Rounds>`, `save(rounds): Effect<void>`.
 
 **Application — internal state**
-- `GuessState`: `idle | thinking | ready(Guess) | failed(GuessFailed)`.
-- Window size N (how many last bits the gateway gets).
-- Both live in `GuessState` (one service, one `Layer`, owns the guess fiber). Its shape is
-  internal to guesser.
+- `GuessState`: a `GuessProgress` and the window size N (how many last bits the gateway
+  gets). One service, one `Layer`, owns the guess fiber. Its shape is internal to guesser.
+  `GuessState.layer({ windowSizeRepository })` is required and loads the saved size.
+- `RoundsState`: the rounds. `RoundsState.layer({ repository })` loads the saved rounds.
 
 **Application — use cases** (command → response)
 - `ObserveGuessStatus` → `Stream<GuessStatus>` — status **without the bit**
-  (`idle | thinking | ready | failed(reason)`), so the UI cannot show the guess before the
-  press.
+  (`idle | thinking | ready | failed(reason)`), made by `publicStatus`.
 - `RequestGuess { bits }` → `Effect<void>` — takes `lastN(N)`, starts the guess in a
   background fiber, interrupts the previous one if it still runs. Does not wait. With zero
   bits it does nothing and the status stays `idle`.
 - `TakeGuess` → `Effect<Guess | null>` — returns the ready guess and sets state to `idle`;
   `null` if not ready.
-- `SetWindowSize { n }` → `Effect<void>`, `ObserveWindowSize` → `Stream<number>`. Changing N
-  interrupts a running guess, drops a ready one, and requests a new guess with the current
-  bits.
-- Self-contained: `makeRequestGuess({ guessState, gateway? })` creates `LongestMatchGateway`
-  itself when `gateway` is not given. Products never pass it; tests pass a fake.
-- interaction gets `UseCase<TakeGuess>` and `UseCase<RequestGuess>` as constructor arguments.
+- `SetWindowSize { n }` → `Effect<void>`, `ObserveWindowSize` → `Stream<number>`. The size
+  is checked and clamped by domain functions and saved through `WindowSizeRepository`.
+  Changing N interrupts a running guess, drops a ready one, and requests a new guess with
+  the current bits.
+- `ObserveRounds` → `Stream<Rounds>`
+- `ObserveScore` → `Stream<Score>` (derived from rounds)
+- `PressBit { bit }` → `Effect<void>`:
+  1. `TakeGuess`,
+  2. append the round (domain function), save,
+  3. `RequestGuess` with all bits.
+- `ResetRounds` → `Effect<void>` — empties rounds, saves, status goes back to `idle`.
+- At start: `GuessState.layer` loads the saved window size and `RoundsState.layer` loads the
+  saved rounds; the product then requests the first guess.
+- Locks, the guess fiber and the order "clear the guess before `thinking`" stay in
+  application.
+
+**Wiring**
+- Gateway, self-contained: `makeRequestGuess({ guessState, gateway? })` creates
+  `LongestMatchGateway` itself when `gateway` is not given. Products never pass it; tests
+  pass a fake.
+- Repositories, open: `RoundsRepository` and `WindowSizeRepository` are arguments. The
+  product creates the local-storage adapters and passes them in.
 
 **Longest-match adapter (used by products)**
 The classic "longest suffix match" predictor (as in the Aaronson oracle):
@@ -334,30 +424,43 @@ its memory.
   `fetch` (`AbortSignal`).
 - Tested only with a stubbed `fetch`.
 
-### 5.3 interaction (open)
-
-**Domain**
-- `Round = { bit: Bit; guess: Bit | null; hit: boolean | null }` (`null` = no guess was ready).
-- `Rounds`: ordered list of rounds.
-- `Score = { hits, guessed, total, ratio }`: `guessed` = rounds with a guess,
-  `total` = all rounds, `ratio = hits / guessed` (0 when `guessed` is 0).
-- Port `RoundsRepository`: `load: Effect<Rounds>`, `save(rounds): Effect<void>`.
-
-**Application — use cases** (folders `rounds/`, `score/`; command → response)
-- `ObserveRounds` → `Stream<Rounds>`
-- `ObserveScore` → `Stream<Score>` (derived from rounds)
-- `PressBit { bit }` → `Effect<void>`:
-  1. `TakeGuess` via guesser's `UseCase<TakeGuess>`,
-  2. append the round, save,
-  3. `RequestGuess` via guesser's `UseCase<RequestGuess>` with all bits.
-- `ResetRounds` → `Effect<void>` — empties rounds, saves, status goes back to `idle`.
-- At start: `RoundsState.layer({ repository })` loads the saved rounds; the product then
-  requests the first guess.
-
 **Local-storage adapter**
-- Key `guess.rounds`. Decode with `Schema`. If decoding fails: start with empty rounds,
-  copy the raw text to `guess.rounds.corrupt`, log a warning. History is never wiped
-  without a copy. That is why `load` has error type `never`.
+- `RoundsRepository`: key `guess.rounds`. Decode with `Schema`. If decoding fails: start
+  with empty rounds, copy the raw text to `guess.rounds.corrupt`, log a warning. History is
+  never wiped without a copy. That is why `load` has error type `never`.
+- `WindowSizeRepository`: key `guess.windowSize`. No storage, or a value that
+  `isWindowSize` rejects, gives the default. A failed write is ignored. `localStorage` is
+  read lazily.
+
+### 5.3 presentation/state
+
+`guesser-state` holds the logic of the screen that both toolkits need and that the game does
+not need to keep working. It imports only `guesser-application`.
+
+- **History length**: `HISTORY_LENGTH = 40` and a pure `recentRounds(rounds)`. The history
+  strip shows the last 40 rounds. Application keeps and counts all rounds, so the limit
+  only changes what is drawn.
+- **Window size draft**: the text in the size field while the user types.
+  - `WindowSizeDraftState` is an Effect service with a `Layer`, holding
+    `SubscriptionRef<string | null>`. `null` means no edit is in progress.
+  - A pure parser turns the text into a number. Empty text gives `null` (`Number("")` would
+    be 0). Any other text gives `Number(text)`, NaN included. Domain `windowSizeFor` is the
+    only place that rejects NaN; neither the parser nor `SetWindowSize` callers check it.
+  - `ObserveWindowSizeDraft` → `Stream<string>`: the draft if there is one, otherwise the
+    current size as text.
+  - `EditWindowSizeDraft { text }` → `Effect<void>`: sets the draft.
+  - `CommitWindowSizeDraft` → `Effect<void>`: parses the draft; a number goes to
+    `SetWindowSize` as typed (domain clamps it and ignores NaN); the draft becomes `null` in
+    every case. With no edit in progress it sends nothing.
+- **Screen texts** (`copy.ts`): `statusText`, `scoreText`, `noGuessText` (uses `score.unguessed`),
+  `lastRoundText`. One copy, used by both toolkits.
+- **`roundClass(round)`**: `"hit"`, `"miss"` or `"none"`, the class of a history cell.
+- **`bitForKey(key)`**: takes the key, the repeat flag, the Ctrl/Meta/Alt flags and whether the
+  event target is an input; returns `0`, `1` or `null`. Keys 0 and 1 press a bit; auto-repeat,
+  modifiers and typing in an input do not.
+- The toolkit packages keep only events and drawing for these: Enter blurs the field, blur
+  commits, `min` and `max` come from application's `WINDOW_SIZE_MIN` and `WINDOW_SIZE_MAX`.
+  The DOM bridge has an observed-state class for the draft; the React bridge has a hook.
 
 ## 6. Screen (both products)
 
@@ -374,29 +477,38 @@ its memory.
 
 ## 7. Testing
 
-- Domain and longest-match: plain unit tests (score maths, `lastN`, the algorithm on known
-  sequences: e.g. `0101010` → `1`, a repeated pattern is learned, fallback rules).
-- Application: Vitest with Effect, using a test `GuessGateway` (slow, failing, fixed) and an
-  in-memory `RoundsRepository` value. Cover: press while thinking (old fiber interrupted,
-  round has no guess), failure becomes state, reset, change of N.
-- Local-storage adapter: round trip and the corrupt-data path.
+- Domain and longest-match: plain unit tests, no mocks (score maths, `lastN`, window size
+  limits and clamping, guess status moves and `publicStatus`, appending a round, the
+  algorithm on known sequences: e.g. `0101010` → `1`, a repeated pattern is learned,
+  fallback rules).
+- Application: Vitest with Effect, using a test `GuessGateway` (slow, failing, fixed) and
+  in-memory `RoundsRepository` and `WindowSizeRepository` values. Cover: press while
+  thinking (old fiber interrupted, round has no guess), failure becomes state, reset,
+  change of N (saved through the repository).
+- Local-storage adapters: round trip, the corrupt-data path for rounds, and the default for
+  a missing or invalid window size.
 - Jev adapter: stubbed `fetch` (request shape, each error mapping, abort on interrupt).
+- presentation/state: `recentRounds` and the window size draft (edit, commit, empty or
+  invalid text).
 - Bridges: one small test each (subscribe gets the current value first; unmount/dispose
-  stops the fiber).
+  stops the fiber), plus one screen test per toolkit for blur and Enter in the size field.
 
 ## 8. Skills (deliverable)
 
 Written after the code proves the practice, in `.claude/skills/`, using the
 `superpowers:writing-skills` process. Planned set (names may change):
 
-- feature layout: domain / application / adapters / presentation / product with Effect
+- `hexagonal-layering`: the language-independent skill. Which layer owns a rule, a type,
+  state or an I/O call; the decision tests; the use case body; red flags. The other skills
+  refer to it for the rules.
+- feature layout: how the layers map to packages and Effect types
 - one package per layer and the allowed dependency table
 - use cases: Command + `UseCase<C>` in TS + Effect (phantom response type, one constructor per
   command, dependencies as constructor arguments), observe (`Stream`) vs command (`Effect`), no
   factories, errors become state
-- state in the application layer: internal `SubscriptionRef` service vs repository port
-  (when a port is ceremony, when it is not)
-- adapter wiring: self-contained vs open feature, and the cost of each
+- state: game state in the application layer (internal `SubscriptionRef` service,
+  repository port for saving), UI-only state in presentation/state
+- adapter wiring: self-contained gateway vs open repositories, and the cost of each
 - gateway port with more than one adapter (local algorithm + remote reference adapter)
 - React bridge and DOM bridge (driving adapters)
 - composition root with `ManagedRuntime`: two phases (Layers, then plain constructors),
@@ -405,8 +517,9 @@ Written after the code proves the practice, in `.claude/skills/`, using the
   constructor is enough
 - naming: words to avoid and why (ViewModel, Store, Service, View, Rx)
 
-Each skill says what is specific to TS/Effect and what is a language-neutral idea, and
-points to the matching vocabla-mill skill where the idea came from.
+`hexagonal-layering` holds the language-neutral ideas. Each TS/Effect skill says only what
+is specific to TS and Effect, and points to `hexagonal-layering` and to the matching
+vocabla-mill skill where the idea came from.
 
 ## 9. Left to the builder
 
@@ -422,10 +535,15 @@ points to the matching vocabla-mill skill where the idea came from.
 - Effect 4.x, pnpm, Vite, Vitest, TypeScript for the DOM product too.
 - Package naming `@guess/...`.
 - The hidden-guess rule: guess status is visible, the bit is not, until the press.
-- `TakeGuess` / `RequestGuess` as the way interaction uses guesser.
+- `PressBit` uses `TakeGuess` / `RequestGuess` to change the guess state.
 - Bridge helper names `useObserve` / `useRun`.
-- Default N = 32, allowed 1–256; N is kept by guesser in local storage (guesser is
-  self-contained, so this is its own concern).
+- Default N = 32, allowed 1–256, both in domain. N is saved through `WindowSizeRepository`;
+  the products pass the local-storage adapter.
+- Blur with no edit sends nothing and starts no guess. A user who only tabs through the N
+  field must not cause a new guess request. `CommitWindowSizeDraft` does nothing when the
+  draft is `null`; this is kept on purpose, and tested in state and in both toolkits.
+- The history strip shows the last 40 rounds. This is screen behaviour, so it is in
+  presentation/state; all rounds are kept and counted.
 - Longest-match details: most recent match wins; fallback = majority bit, tie → opposite of
   the last bit; `confidence = k / (L − 1)`.
 - The frequency adapter from the first draft is dropped; longest-match plus test gateways

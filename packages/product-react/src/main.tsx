@@ -1,7 +1,7 @@
 import { StrictMode } from "react"
 import { createRoot } from "react-dom/client"
 import { Effect, Layer, ManagedRuntime } from "effect"
-import { makeLocalStorageRoundsRepository } from "@guess/interaction-adapter-local-storage"
+import { makeLocalStorageRoundsRepository, makeLocalStorageWindowSizeRepository } from "@guess/guesser-adapter-local-storage"
 import {
   GuessState,
   makeObserveGuessStatus,
@@ -9,8 +9,6 @@ import {
   makeRequestGuess,
   makeSetWindowSize,
   makeTakeGuess,
-} from "@guess/guesser-application"
-import {
   makeObserveRounds,
   makeObserveScore,
   makePressBit,
@@ -18,18 +16,29 @@ import {
   makeResumeGame,
   ResumeGame,
   RoundsState,
-} from "@guess/interaction-application"
-import { GuessProvider, GuessScreen } from "@guess/presentation-react"
+} from "@guess/guesser-application"
+import {
+  makeCommitWindowSizeDraft,
+  makeEditWindowSizeDraft,
+  makeObserveWindowSizeDraft,
+  WindowSizeDraftState,
+} from "@guess/guesser-state"
+import { GuessProvider, GuessScreen } from "@guess/guesser-browser-react"
 
 const repository = makeLocalStorageRoundsRepository()
+const windowSizeRepository = makeLocalStorageWindowSizeRepository()
 
 const runtime = ManagedRuntime.make(
-  Layer.mergeAll(GuessState.layer(), RoundsState.layer({ repository })),
+  Layer.mergeAll(
+    GuessState.layer({ windowSizeRepository }),
+    RoundsState.layer({ repository }),
+    WindowSizeDraftState.layer(),
+  ),
 )
 
-const { guessState, roundsState } = await runtime.runPromise(
+const { guessState, roundsState, draftState } = await runtime.runPromise(
   Effect.gen(function* () {
-    return { guessState: yield* GuessState, roundsState: yield* RoundsState }
+    return { guessState: yield* GuessState, roundsState: yield* RoundsState, draftState: yield* WindowSizeDraftState }
   }),
 )
 
@@ -42,7 +51,10 @@ const observeRounds = makeObserveRounds({ roundsState })
 const observeScore = makeObserveScore({ roundsState })
 const observeGuessStatus = makeObserveGuessStatus({ guessState })
 const observeWindowSize = makeObserveWindowSize({ guessState })
-const setWindowSize = makeSetWindowSize({ guessState })
+const setWindowSize = makeSetWindowSize({ guessState, windowSizeRepository })
+const observeWindowSizeDraft = makeObserveWindowSizeDraft({ draftState, observeWindowSize })
+const editWindowSizeDraft = makeEditWindowSizeDraft({ draftState })
+const commitWindowSizeDraft = makeCommitWindowSizeDraft({ draftState, setWindowSize })
 
 const root = document.getElementById("app")
 if (root === null) throw new Error("Missing #app element")
@@ -55,10 +67,11 @@ createRoot(root).render(
         observeRounds,
         observeScore,
         observeGuessStatus,
-        observeWindowSize,
+        observeWindowSizeDraft,
         pressBit,
         resetRounds,
-        setWindowSize,
+        editWindowSizeDraft,
+        commitWindowSizeDraft,
       }}
     >
       <GuessScreen />

@@ -1,44 +1,65 @@
 ---
 name: effect-feature-layout
-description: Use when adding a feature to a TypeScript + Effect app, deciding where a type, port, state service, use case, adapter or UI piece belongs, or checking a change for layer violations such as an adapter import in a domain package.
+description: Use when adding a feature to a TypeScript + Effect app, deciding which folder or `@guess/...` package a type, port, state service, use case, adapter or UI piece goes in, or looking for the file name and order for a new feature.
 ---
 
-# Feature layout: domain / application / adapters / presentation / product
+# Feature layout: folders, packages and Effect types
 
-Language-neutral idea from vocabla-mill `hexagonal-feature-layout`: the domain knows nothing about technology; adapters implement ports; the application layer connects them. Folder names and Effect types below are TS/Effect specific.
+**REQUIRED BACKGROUND:** hexagonal-layering. It has the rules: what each layer owns, the decision tests, the use case shape and the red flags. This skill only shows how those layers look in this repo.
 
-## Where things go (from `guesser` and `interaction`)
+## Folders and packages
 
-| Layer | Holds | Example |
+```
+packages/
+  core/                          @guess/core
+  features/<feature>/
+    logic/
+      domain/                    @guess/<feature>-domain
+      application/               @guess/<feature>-application
+      adapter-<tech>/            @guess/<feature>-adapter-<tech>
+    presentation/
+      state/                     @guess/<feature>-state
+      browser-<toolkit>/         @guess/<feature>-browser-<toolkit>
+  product-<toolkit>/             @guess/product-<toolkit>
+```
+
+The real feature is `guesser`, with `browser-react` and `browser-dom`. The allowed imports between packages are in `package-per-layer`.
+
+## Layers as Effect types
+
+| Layer | Holds, in Effect terms | Example |
 |---|---|---|
-| `core` | shared kernel: `Bit`, `Bits`, `UseCaseCommand`, `UseCase` | `packages/core/src/usecase.ts` |
-| `<feature>/domain` | plain types, tagged errors, **port** interfaces | `GuessGateway`, `Guess`, `RoundsRepository` |
-| `<feature>/application` | state service + its Layer, commands, `make…` use cases | `GuessState`, `makePressBit` |
-| `<feature>/adapter-*` | a port implementation, plain `make…` function | `makeLongestMatchGateway`, `makeLocalStorageRoundsRepository` |
-| `presentation-*` | bridge to the UI framework + screens | `useObserve`, `ObservedState` |
-| `product-*` | composition root, no business logic | `main.tsx`, `main.ts` |
+| `core` | `Bit`, `Bits`, `UseCaseCommand`, `UseCase` | `packages/core/src/usecase.ts` |
+| `domain` | plain types, pure functions, `Data.TaggedError`, ports as interfaces whose methods return `Effect` | `GuessGateway`, `clampWindowSize`, `WindowSizeRepository` |
+| `application` | `Context.Service` state + its `Layer`, commands, `make...` use cases | `GuessState`, `makePressBit` |
+| `adapter-*` | a port implementation, a plain `make...` function | `makeLongestMatchGateway`, `makeLocalStorageRoundsRepository` |
+| `presentation/state` | UI-only state (`Layer`) and its use cases, shared by all toolkits | `WindowSizeDraftState`, `makeCommitWindowSizeDraft` |
+| `presentation/browser-*` | the bridge (hook or `EventTarget`) and the screen | `useObserve`, `ObservedState` |
+| `product-*` | the composition root | `main.tsx`, `main.ts` |
 
-## Paths and names
+Game state (what the game needs to keep working) lives in `application`. Logic that only shapes one screen, such as the text in a field, the screen texts, the class of a history cell or which key presses a bit, lives in `presentation/state`, once, for all toolkits. Where a Layer is allowed: `when-to-use-layer`.
 
-`packages/<feature>/<layer>/` is package `@guess/<feature>-<layer>` (`packages/guesser/application` = `@guess/guesser-application`). Each package has one `src/index.ts` that is its only export. Tests sit next to the code (`src/*.test.ts`). Command and maker share a file: `rounds/press-bit.ts` holds `PressBit` and `makePressBit`.
+## File conventions
 
-## Rules
-
-1. **State the UI shows lives in application**, never in presentation. Two UIs need the same state. See `effect-app-state`.
-2. **Domain imports only `core` and `effect`.** Ports are plain TS interfaces whose methods return `Effect` (error type `never` when the failure is turned into state, as `RoundsRepository.load` does); errors are `Data.TaggedError`.
-3. **Use cases of one state sit in one folder** (`rounds/` has `PressBit`, `ResetRounds`, `ObserveRounds`). The folder is the grouping; no grouping type.
-4. **An application package re-exports, as types, every domain type its use cases return** (`export type { Round, Rounds, Score } from "@guess/interaction-domain"`). Presentation and products then import only `*-application`.
-5. **One owner per state.** Only the owner's use cases write it. Another feature changes it by calling the owner's `UseCase<C>` (interaction calls guesser's `TakeGuess`, `RequestGuess`).
-6. **Adapters are plain functions** with no tag or Layer (`when-to-use-layer`). They touch browser globals lazily inside `Effect.sync`.
-7. **Presentation never imports adapters; products wire them.**
-8. Failures become state; see `effect-usecase-command`.
+- Each package has one `src/index.ts`, its only export.
+- Tests sit next to the code: `src/*.test.ts`.
+- A command and its maker share a file: `rounds/press-bit.ts` holds `PressBit` and `makePressBit`.
+- Use cases of one state share a folder (`guess/`, `rounds/`, `score/` in application). The folder is the grouping; there is no grouping type.
+- State service: `<Thing>State` in `state.ts` or `<thing>-state.ts`. Adapter: `make<Tech><Port>`.
+- Application re-exports, as types, the domain types its use cases return, so browsers and products import `*-application` only.
+- Names: `naming-without-false-hints`.
 
 ## Adding a feature: order
 
-domain types and ports -> adapter + its test -> state service (if needed) -> commands and use cases (one file each) -> index.ts exports -> bridge entries in each presentation -> product wiring. Package rules: `package-per-layer`.
+1. Domain: types, rules as pure functions, ports and errors. Test the rules.
+2. Adapter and its test.
+3. State service in application, if there is live state.
+4. Commands and use cases, one file each (`effect-usecase-command`).
+5. `index.ts` exports.
+6. `presentation/state`, if a screen needs logic of its own.
+7. Bridge entries in each `browser-*` package.
+8. Product wiring (`effect-composition-root`) and a row in `scripts/check-deps.mjs` for each new package.
 
 ## Red flags
 
-- A type in domain that mentions `localStorage`, `fetch`, React.
-- A presentation package that holds the only copy of a value.
-- A use case that imports an adapter. (One deliberate exception: `adapter-wiring-modes`.)
+- Domain holds only ports and errors. See `hexagonal-layering`.

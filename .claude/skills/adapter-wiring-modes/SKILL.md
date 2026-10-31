@@ -5,9 +5,9 @@ description: Use when a TypeScript feature package must choose between creating 
 
 # Wiring modes: self-contained vs open
 
-A feature either picks its adapter itself (**self-contained**) or receives it from the product (**open**). Both exist in this repo on purpose. The trade-off is language-neutral; compare vocabla-mill `composition-root` and `hexagonal-feature-layout`. The default-argument code is TS.
+An adapter is either created by the feature (**self-contained**) or received from the product (**open**). Both exist in this repo on purpose, inside one feature, `guesser`: the gateway is self-contained, both repositories are open. The trade-off is language-neutral; compare vocabla-mill `composition-root` and `hexagonal-feature-layout`. The default-argument code is TS.
 
-## Self-contained: `guesser`
+## Self-contained: the gateway
 
 ```ts
 export const makeRequestGuess = (deps: {
@@ -21,15 +21,24 @@ export const makeRequestGuess = (deps: {
 
 Products never pass `gateway`; tests pass a fake. `makeSetWindowSize` takes the same optional `gateway` as a plain argument (an earlier hidden WeakMap lookup was rejected).
 
-- **Gain:** the product wiring is short; the feature works as one block.
-- **Cost:** `guesser-application` depends on `guesser-adapter-longest-match`. This breaks the strict hexagon rule. The package table allows it explicitly (`package-per-layer`). Replacing the algorithm means editing the application package or passing `gateway` in every constructor that takes it. Two use cases that need the gateway must be given the **same** instance by the caller if that matters.
+- **Gain:** the product wiring is short; the guess works as one block.
+- **Cost:** `guesser-application` depends on `guesser-adapter-longest-match`. This breaks the strict hexagon rule. The package table allows it explicitly (`package-per-layer`). Replacing the algorithm means editing the application package or passing `gateway` in every constructor that takes it. `RequestGuess` and `SetWindowSize` each create their own gateway; if they must share one instance, the caller passes the same one to both.
 
-## Open: `interaction`
+## Open: the repositories
 
-`RoundsState.layer({ repository })` and `makePressBit({ ..., repository, ... })`. The product creates `makeLocalStorageRoundsRepository()` and passes it.
+`RoundsRepository` and `WindowSizeRepository` are ports in `guesser-domain`. Application only declares them:
 
-- **Gain:** application depends only on the domain port; swapping storage touches only the product.
-- **Cost:** every product repeats the wiring line; a forgotten argument is a compile error, which is fine.
+```ts
+GuessState.layer({ windowSizeRepository })
+RoundsState.layer({ repository })
+makePressBit({ roundsState, repository, takeGuess, requestGuess })
+makeSetWindowSize({ guessState, windowSizeRepository })
+```
+
+The product creates `makeLocalStorageRoundsRepository()` and `makeLocalStorageWindowSizeRepository()` (both in `guesser-adapter-local-storage`) and passes them in. Application never imports that adapter.
+
+- **Gain:** application depends only on the domain ports; swapping storage touches only the products.
+- **Cost:** every product repeats the wiring lines; a forgotten argument is a compile error, which is fine.
 
 ## Choosing
 

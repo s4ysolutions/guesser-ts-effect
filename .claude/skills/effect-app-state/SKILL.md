@@ -1,44 +1,67 @@
 ---
 name: effect-app-state
-description: Use when deciding where UI state lives in a TypeScript + Effect app, whether to hold it in a SubscriptionRef service or behind a repository port, how to load and save it, or how to hide a state service's internals.
+description: Use when deciding where state lives in a TypeScript + Effect app, whether to hold it in a SubscriptionRef service or behind a repository port, how to load and save it, where UI-only state goes, or how to hide a state service's internals.
 ---
 
-# State in the application layer
+# State: application, domain, ports and presentation/state
 
-Language-neutral idea: UI state belongs to the application, one owner per state; a port is for a real choice of technology. From vocabla-mill `frontend-store-and-rx` and `static-data-memory-adapter`. `SubscriptionRef`, `Context.Service`, `FiberHandle` are Effect 4.0.6.
+One owner per state. Rules about the state go in the domain (`hexagonal-layering`). `SubscriptionRef`, `Context.Service` and `FiberHandle` are Effect 4.0.6.
 
-## Live state = a `Context.Service` holding `SubscriptionRef`s (`guesser/application/src/state.ts`)
+| Kind | Lives in | Example |
+|---|---|---|
+| Live game state | `application`, a `Context.Service` of `SubscriptionRef`s | `GuessState`, `RoundsState` |
+| Rules about that state | `domain`, pure functions | `clampWindowSize`, `progressForRequest`, `takeGuess`, `appendRound` |
+| Saved copy | behind a port declared in `domain` | `RoundsRepository`, `WindowSizeRepository` |
+| UI-only state | `presentation/state`, same service shape | `WindowSizeDraftState` |
+
+## Live state: a `Context.Service` holding `SubscriptionRef`s (`logic/application/src/guess/state.ts`)
 
 ```ts
 // The shape is internal to this package: only its use cases read or write it.
 export class GuessState extends Context.Service<GuessState, {
-  readonly status: SubscriptionRef.SubscriptionRef<InternalStatus>
+  readonly status: SubscriptionRef.SubscriptionRef<GuessProgress>
   readonly windowSize: SubscriptionRef.SubscriptionRef<number>
   readonly lastBits: SubscriptionRef.SubscriptionRef<Bits>
   readonly fiber: FiberHandle.FiberHandle<void, never>
   readonly lock: Semaphore.Semaphore
-  readonly storage: Storage | undefined
-}>()("GuessState") { static layer(...) { /* Layer.effect, makes refs, fiber, lock */ } }
+}>()("GuessState") {
+  static layer(deps: { readonly windowSizeRepository: WindowSizeRepository }): Layer.Layer<GuessState> { /* Layer.effect */ }
+}
 ```
 
 - It is **not a port**. No second implementation is expected.
+- The state holds values only. The rules that change them (`progressForRequest`, `takeGuess`, `windowSizeFor`) are domain functions that the use cases call. A state file with rules or storage calls is a red flag.
 - Use cases take `GuessState["Service"]` as a constructor argument.
 - The state owns its **lock** (1-permit `Semaphore`) and any **fiber handle**. See `effect-usecase-command`.
-- Observe use cases return `SubscriptionRef.changes(ref)` (current value first). Map internal to public shape in the use case: `toPublic` drops the guess from `Ready`, so the UI cannot show it before the press.
-- **Internals are hidden by convention only.** `GuessState["Service"]` is a structural type; any code that has the value can read the refs. We keep "only this package's use cases touch it" by index.ts exports (state shape is exported, internals like `startGuess` are not) and review. There is no compiler guard.
+- Observe use cases return `SubscriptionRef.changes(ref)` (current value first). When the UI may not see everything, the observe use case calls a domain function: `makeObserveGuessStatus` maps `GuessProgress` through `publicStatus`, which drops the guess so the UI cannot show it before the press.
+- **Internals are hidden by convention only.** `GuessState["Service"]` is a structural type; any code that has the value can read the refs. "Only this package's use cases touch it" is kept by `index.ts` exports (`startGuess` is not exported) and review. There is no compiler guard.
 
-The state loads once at start (`RoundsState.layer` calls `repository.load` inside `Layer.effect`), then lives in memory in the ref. Use cases save after each change. Observe never reads the repository. A save failure is handled inside the adapter (it logs a warning; `save` has error type `never`), so the UI is not blocked by storage.
+## Persistence goes through ports
 
-## Repository port only where technology can change (`interaction`)
+Both saved values have a port in the domain, an adapter in `adapter-local-storage`, and the product passes the adapter in (`adapter-wiring-modes`):
 
-`RoundsRepository { load: Effect<Rounds>; save(rounds): Effect<void> }` is in the domain. `RoundsState.layer({ repository })` loads once at start; `PressBit` saves after each change. `load` has error type `never`: the adapter turns decode failure into empty rounds plus a backup key (history is never wiped without a copy).
+- `RoundsRepository { load: Effect<Rounds>; save(rounds): Effect<void> }`. `RoundsState.layer({ repository })` loads once at start. `PressBit` and `ResetRounds` save after each change.
+- `WindowSizeRepository { load: Effect<number>; save(n): Effect<void> }`. `GuessState.layer({ windowSizeRepository })` loads once at start. `SetWindowSize` saves after each change.
 
-## When a port is ceremony
+The state loads once, then lives in memory in the ref. Observe never reads the repository. `load` and `save` have error type `never`: the adapter handles bad data (rounds: empty list plus a backup key; size: the default) and failed writes (ignored), so storage never blocks the UI. Each rule for a stored value (is `7` a valid size?) is a domain function the adapter calls (`isWindowSize`).
 
-`GuessState` in `guesser` has only a tiny storage use (window size N in `localStorage`), read with a `try` and a default, passed as `options.storage` for tests. A full repository port for one number would be ceremony. A port pays when there are two real technologies or you need to fake slow, failing IO in tests. Ask: "what second implementation would I write?" If none, no port.
+Ask before adding a port: "what second implementation, or fake for tests, would I write?" Here the answer is a fake storage for tests and a different store later, and the port also keeps `localStorage` out of application.
+
+## UI-only state: `presentation/state`
+
+State that only shapes one screen, and that the game does not need to keep working, goes in `@guess/guesser-state`. It has the same shape as application state: a `Context.Service` with a `SubscriptionRef`, a Layer, and `Command` + `UseCase<C>` use cases. Both toolkits share it, so the logic is written once.
+
+Example: `WindowSizeDraftState` holds `SubscriptionRef<string | null>`, the text in the size field. `null` means no edit is in progress.
+
+- `EditWindowSizeDraft({ text })` sets the draft.
+- `CommitWindowSizeDraft` takes the draft and clears it in one step (`getAndSet(null)`), parses it with `parseWindowSizeDraft` (empty text gives `null`; other text gives `Number(text)`, NaN included), and passes a number on to `setWindowSize` as typed. The domain clamps it and is the only place that rejects NaN. With no draft it sends nothing.
+- `ObserveWindowSizeDraft` emits the draft if there is one, otherwise the current size as text.
+
+The draft is not game state: if it is lost, the game still works. The window size itself is game state, so it stays in `GuessState`. A value the game needs must not move into `presentation/state`.
 
 ## Red flags
 
 - State in a React `useState` or a DOM object that the other UI needs too.
 - A use case writing a ref that another feature owns.
 - A `Layer` that is not needed: see `when-to-use-layer`.
+- `localStorage` or another storage call inside a state service or use case.

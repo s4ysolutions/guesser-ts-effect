@@ -1,6 +1,0 @@
-import "./guess.css"
-export type { EffectRunner } from "./bridge/runner.ts"
-export { ObservedState } from "./bridge/observed-state.ts"
-export { DomGuessStatus, DomRounds, DomScore, DomWindowSize } from "./bridge/dom-states.ts"
-export type { GuessUseCases } from "./bridge/dom-states.ts"
-export { mountGuessScreen } from "./views/guess-screen.ts"

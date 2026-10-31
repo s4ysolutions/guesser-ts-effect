@@ -24,11 +24,11 @@ importers:
         specifier: 4.0.6
         version: 4.0.6
 
-  packages/guesser/adapter-jev:
+  packages/features/guesser/logic/adapter-jev:
     dependencies:
       '@guess/core':
         specifier: workspace:*
-        version: link:../../core
+        version: link:../../../../core
       '@guess/guesser-domain':
         specifier: workspace:*
         version: link:../domain
@@ -36,11 +36,8 @@ importers:
         specifier: 4.0.6
         version: 4.0.6
 
-  packages/guesser/adapter-longest-match:
+  packages/features/guesser/logic/adapter-local-storage:
     dependencies:
-      '@guess/core':
-        specifier: workspace:*
-        version: link:../../core
       '@guess/guesser-domain':
         specifier: workspace:*
         version: link:../domain
@@ -48,11 +45,23 @@ importers:
         specifier: 4.0.6
         version: 4.0.6
 
-  packages/guesser/application:
+  packages/features/guesser/logic/adapter-longest-match:
     dependencies:
       '@guess/core':
         specifier: workspace:*
-        version: link:../../core
+        version: link:../../../../core
+      '@guess/guesser-domain':
+        specifier: workspace:*
+        version: link:../domain
+      effect:
+        specifier: 4.0.6
+        version: 4.0.6
+
+  packages/features/guesser/logic/application:
+    dependencies:
+      '@guess/core':
+        specifier: workspace:*
+        version: link:../../../../core
       '@guess/guesser-adapter-longest-match':
         specifier: workspace:*
         version: link:../adapter-longest-match
@@ -63,74 +72,41 @@ importers:
         specifier: 4.0.6
         version: 4.0.6
 
-  packages/guesser/domain:
+  packages/features/guesser/logic/domain:
     dependencies:
       '@guess/core':
         specifier: workspace:*
-        version: link:../../core
+        version: link:../../../../core
       effect:
         specifier: 4.0.6
         version: 4.0.6
 
-  packages/interaction/adapter-local-storage:
-    dependencies:
-      '@guess/interaction-domain':
-        specifier: workspace:*
-        version: link:../domain
-      effect:
-        specifier: 4.0.6
-        version: 4.0.6
-
-  packages/interaction/application:
+  packages/features/guesser/presentation/browser-dom:
     dependencies:
       '@guess/core':
         specifier: workspace:*
-        version: link:../../core
+        version: link:../../../../core
       '@guess/guesser-application':
         specifier: workspace:*
-        version: link:../../guesser/application
-      '@guess/interaction-domain':
+        version: link:../../logic/application
+      '@guess/guesser-state':
         specifier: workspace:*
-        version: link:../domain
+        version: link:../state
       effect:
         specifier: 4.0.6
         version: 4.0.6
 
-  packages/interaction/domain:
+  packages/features/guesser/presentation/browser-react:
     dependencies:
       '@guess/core':
         specifier: workspace:*
-        version: link:../../core
-      effect:
-        specifier: 4.0.6
-        version: 4.0.6
-
-  packages/presentation-dom:
-    dependencies:
-      '@guess/core':
-        specifier: workspace:*
-        version: link:../core
+        version: link:../../../../core
       '@guess/guesser-application':
         specifier: workspace:*
-        version: link:../guesser/application
-      '@guess/interaction-application':
+        version: link:../../logic/application
+      '@guess/guesser-state':
         specifier: workspace:*
-        version: link:../interaction/application
-      effect:
-        specifier: 4.0.6
-        version: 4.0.6
-
-  packages/presentation-react:
-    dependencies:
-      '@guess/core':
-        specifier: workspace:*
-        version: link:../core
-      '@guess/guesser-application':
-        specifier: workspace:*
-        version: link:../guesser/application
-      '@guess/interaction-application':
-        specifier: workspace:*
-        version: link:../interaction/application
+        version: link:../state
       effect:
         specifier: 4.0.6
         version: 4.0.6
@@ -151,20 +127,32 @@ importers:
         specifier: 19.3.0
         version: 19.3.0(@types/react@19.3.0)
 
-  packages/product-dom:
+  packages/features/guesser/presentation/state:
     dependencies:
+      '@guess/core':
+        specifier: workspace:*
+        version: link:../../../../core
       '@guess/guesser-application':
         specifier: workspace:*
-        version: link:../guesser/application
-      '@guess/interaction-adapter-local-storage':
+        version: link:../../logic/application
+      effect:
+        specifier: 4.0.6
+        version: 4.0.6
+
+  packages/product-dom:
+    dependencies:
+      '@guess/guesser-adapter-local-storage':
         specifier: workspace:*
-        version: link:../interaction/adapter-local-storage
-      '@guess/interaction-application':
+        version: link:../features/guesser/logic/adapter-local-storage
+      '@guess/guesser-application':
         specifier: workspace:*
-        version: link:../interaction/application
-      '@guess/presentation-dom':
+        version: link:../features/guesser/logic/application
+      '@guess/guesser-browser-dom':
         specifier: workspace:*
-        version: link:../presentation-dom
+        version: link:../features/guesser/presentation/browser-dom
+      '@guess/guesser-state':
+        specifier: workspace:*
+        version: link:../features/guesser/presentation/state
       effect:
         specifier: 4.0.6
         version: 4.0.6
@@ -175,18 +163,18 @@ importers:
 
   packages/product-react:
     dependencies:
+      '@guess/guesser-adapter-local-storage':
+        specifier: workspace:*
+        version: link:../features/guesser/logic/adapter-local-storage
       '@guess/guesser-application':
         specifier: workspace:*
-        version: link:../guesser/application
-      '@guess/interaction-adapter-local-storage':
+        version: link:../features/guesser/logic/application
+      '@guess/guesser-browser-react':
         specifier: workspace:*
-        version: link:../interaction/adapter-local-storage
-      '@guess/interaction-application':
+        version: link:../features/guesser/presentation/browser-react
+      '@guess/guesser-state':
         specifier: workspace:*
-        version: link:../interaction/application
-      '@guess/presentation-react':
-        specifier: workspace:*
-        version: link:../presentation-react
+        version: link:../features/guesser/presentation/state
       effect:
         specifier: 4.0.6
         version: 4.0.6

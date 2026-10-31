@@ -14,11 +14,12 @@ This goes against the common Effect habit "a Layer for everything". The code is 
 | Thing | Effectful creation | Owns resource | Layer |
 |---|---|---|---|
 | use cases (about 10) | no | no | no |
-| `makeLocalStorageRoundsRepository`, `makeLongestMatchGateway`, Jev gateway | no | no | no |
+| `makeLocalStorageRoundsRepository`, `makeLocalStorageWindowSizeRepository`, `makeLongestMatchGateway`, Jev gateway | no | no | no |
 | `RoundsState` | yes: `SubscriptionRef.make`, first `load` | no | **yes** |
-| `GuessState` | yes: `SubscriptionRef.make` | yes: guess fiber, interrupted on dispose | **yes** |
+| `GuessState` | yes: `SubscriptionRef.make`, first window size `load` | yes: guess fiber, interrupted on dispose | **yes** |
+| `WindowSizeDraftState` | yes: `SubscriptionRef.make` | no | **yes** |
 
-Exactly two Layers: `GuessState.layer(options?)` and `RoundsState.layer({ repository })`. (`packages/guesser/application/src/state.ts`, `packages/interaction/application/src/state.ts`)
+Exactly three Layers: `GuessState.layer({ windowSizeRepository })`, `RoundsState.layer({ repository })` and `WindowSizeDraftState.layer()`. (`logic/application/src/guess/state.ts`, `logic/application/src/rounds/state.ts`, `presentation/state/src/window-size-draft-state.ts`, all under `packages/features/guesser/`)
 
 ```ts
 static layer(deps: { readonly repository: RoundsRepository }): Layer.Layer<RoundsState> {
@@ -32,12 +33,12 @@ static layer(deps: { readonly repository: RoundsRepository }): Layer.Layer<Round
 
 ## Consequences
 
-- **Ports are plain TS interfaces**, not tags. A Layer that needs a plain dependency takes it as a function argument (`RoundsState.layer({ repository })`), not through `R`.
+- **Ports are plain TS interfaces**, not tags. A Layer that needs a plain dependency takes it as a function argument (`RoundsState.layer({ repository })`, `GuessState.layer({ windowSizeRepository })`), not through `R`.
 - Use cases have `R = never`. Dependencies are constructor arguments, so the type of a use case never shows them.
 - Adapters resolve browser globals lazily inside `Effect.sync` / `try` (`globalThis.localStorage` inside `load`), not at import or make time. A "plain" adapter then still works in Node tests and when storage is blocked.
 - A Layer's resource ends when the runtime is disposed: `FiberHandle.make()` inside the Layer is released by the scope and interrupts the guess fiber.
 
-- Once the two Layers are built, the product calls **each use case constructor itself**. Do not hide them in a `makeUseCases(...)` that returns a record (see `effect-composition-root`).
+- Once the three Layers are built, the product calls **each use case constructor itself**. Do not hide them in a `makeUseCases(...)` that returns a record (see `effect-composition-root`).
 
 ## Quick test
 
@@ -48,4 +49,4 @@ Ask two questions: "Does making it run an Effect?" and "Must something be closed
 - `Layer.succeed(Port, adapter)` for a sync adapter with no resource.
 - A port declared with `Context.Service` "so it can be provided".
 - A use case that `yield*`s a tag to find its state (hidden dependency, `R` grows).
-- A third Layer appears: write down which of the two questions it answers "yes" to.
+- A fourth Layer appears: write down which of the two questions it answers "yes" to.

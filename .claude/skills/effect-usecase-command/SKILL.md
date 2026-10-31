@@ -21,7 +21,7 @@ export interface UseCase<C extends UseCaseCommand<unknown>> {
 
 TS has no path-dependent types, so the response rides on an optional phantom field.
 
-## One file per command (`packages/interaction/application/src/rounds/press-bit.ts`)
+## One file per command (`packages/features/guesser/logic/application/src/rounds/press-bit.ts`)
 
 ```ts
 export class PressBit extends Data.TaggedClass("PressBit")<{ readonly bit: Bit }> {
@@ -39,7 +39,7 @@ export const makePressBit = (deps: {
     roundsState.lock.withPermits(1)(Effect.gen(function*() {
       const guess = yield* takeGuess(new TakeGuess())
       const current = yield* SubscriptionRef.get(roundsState.rounds)
-      const next = [...current, makeRound(command.bit, guess?.bit ?? null)]
+      const next = appendRound(current, command.bit, guess)
       yield* SubscriptionRef.set(roundsState.rounds, next)
       yield* repository.save(next)
       yield* requestGuess(new RequestGuess({ bits: bitsOf(next) }))
@@ -47,17 +47,33 @@ export const makePressBit = (deps: {
 }
 ```
 
+## The body of a use case
+
+A use case body has four kinds of step and nothing else: read the state, call a domain function, write the state, call a port. `makePressBit` above is the shape. The rule for `if` is in `hexagonal-layering`: it may only stop on what a domain function returned. `makeSetWindowSize` shows it:
+
+```ts
+const n = windowSizeFor(command.n)   // domain: clamps, or null when not a number
+if (n === null) return               // stops on the domain answer
+yield* guessState.lock.withPermits(1)(Effect.gen(function*() {
+  yield* SubscriptionRef.set(guessState.windowSize, n)
+  yield* windowSizeRepository.save(n)   // port
+  ...
+}))
+```
+
+An `if` that decides a business outcome (a status move, a limit) is a domain function instead (`progressForRequest`, `takeGuess`).
+
 ## Rules (each one was a real mistake)
 
 1. **Declare the phantom field in the class body**: `declare readonly "~response"?: X`. Writing only `implements UseCaseCommand<X>` is not enough: `ResponseOf` then infers `unknown`, because TS reads the class members, not the `implements` clause. A type test (`expectTypeOf`) catches it.
 2. **Constructor deps use `X["Service"]`**, not `X`. In Effect 4 the class type is the tag key, not the service value. `roundsState: RoundsState` does not compile against the value you get from the runtime.
 3. **A plain function, not an Effect, not a Layer.** `makeX(deps): UseCase<X>` is called once by the composition root. No tag, no `Layer`, no `makeX` that returns `Effect`.
 4. **Every dependency is a constructor argument.** No hidden lookup (a WeakMap keyed by the state was tried and rejected). A test can then see all deps in the signature. Other features' use cases come in as `UseCase<TheirCommand>`.
-5. **`R = never` and error `never`.** Never put `RoundsState` in `R`. Failures become state that an `ObserveX` shows (`Failed` status), not an error the UI must catch. Bad input is either ignored (a no-op, like `Number.isNaN` in `SetWindowSize`) or clamped. If the UI must show the problem, add a field to the state; do not add `E`.
+5. **`R = never` and error `never`.** Never put `RoundsState` in `R`. Failures become state that an `ObserveX` shows (`Failed` status), not an error the UI must catch. Bad input is either ignored (a no-op, when the domain function answers `null`, like `windowSizeFor` in `SetWindowSize`) or clamped by the domain. If the UI must show the problem, add a field to the state; do not add `E`.
 6. **Observe returns `Stream`, command returns `Effect`.** `SubscriptionRef.changes` emits the current value first, then each change. Name them `ObserveX`.
-7. **The logic owns validation and clamping.** `SetWindowSize` clamps and rounds `n`; the UI sends what the user typed.
-8. **Concurrent commands need a lock.** UI bridges start each command as its own fiber. A command that reads then writes state, or issues requests in order, must run under a 1-permit `Semaphore` that the **state service owns** (`roundsState.lock`, `guessState.lock`), made in the state's Layer. `SubscriptionRef.updateEffect` is not enough when the body also calls other use cases.
-9. **No re-entrant locking.** `Semaphore` is not re-entrant. If two commands share a step, extract an unlocked internal function (`startGuess`, not exported from `index.ts`) and call it while holding the permit.
+7. **The domain owns validation and clamping.** `SetWindowSize` passes `n` to `windowSizeFor`, which clamps and rounds it; the UI sends what the user typed (parsed to a number).
+8. **Concurrent commands need a lock.** UI bridges start each command as its own fiber. A command that reads then writes state, or issues requests in order, must run under a 1-permit `Semaphore` that the **state service owns** (`roundsState.lock`, `guessState.lock`), made in the state's Layer. State that only one command writes, like the window size draft, needs no lock. `SubscriptionRef.updateEffect` is not enough when the body also calls other use cases.
+9. **No re-entrant locking.** `Semaphore` is not re-entrant. If two commands share a step, extract an unlocked internal function (`startGuess` in `guess/request.ts`, not exported from `index.ts`; `RequestGuess` and `SetWindowSize` both call it) and call it while holding the permit.
 10. **Stale async result:** before setting `Thinking`, call `FiberHandle.clear(state.fiber)`. It waits for the old fiber to exit, so the old guess cannot write after the new state.
 11. Do not use `Request.TaggedClass` (made for batching; its response is a value, not a `Stream`).
 

@@ -7,7 +7,7 @@ description: Use when one port needs several adapters, such as a local algorithm
 
 Language-neutral idea from vocabla-mill `client-gateway-port` and `client-gateway-jvm-contract-test`: the port speaks domain words only; each adapter maps its own world to them. Code is TS + Effect.
 
-## The port (`guesser/domain/src/guess.ts`)
+## The port (`packages/features/guesser/logic/domain/src/guess.ts`)
 
 ```ts
 export interface GuessGateway {

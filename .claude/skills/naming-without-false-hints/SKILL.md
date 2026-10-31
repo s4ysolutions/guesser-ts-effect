@@ -9,16 +9,16 @@ A name is a promise about shape and lifetime. Idea from vocabla-mill `frontend-s
 
 | Avoid | Why | Use instead (in this repo) |
 |---|---|---|
-| `ViewModel` | Suggests a per-screen object with its own state. Here state is owned by application services and the UI has none. | the bridge entry: `DomRounds`, `useRounds` |
-| `Store` | Suggests a Redux-style container the UI owns. Our state is a `SubscriptionRef` in application. | `RoundsState`, `GuessState` |
-| `Service` | In Effect it means a `Context.Service` tag. Only the two state classes use it. Use cases and adapters are not services. | `make…` use case, `…Gateway`, `…Repository` |
+| `ViewModel` | Suggests a per-screen object with its own state. Here game state is owned by application services. The only UI state is the window size draft, in `presentation/state`, shared by both toolkits. | the bridge entry: `DomRounds`, `useRounds` |
+| `Store` | Suggests a Redux-style container the UI owns. Our state is a `SubscriptionRef` in a `<Thing>State` service. | `RoundsState`, `GuessState`, `WindowSizeDraftState` |
+| `Service` | In Effect it means a `Context.Service` tag. Only the three state classes use it (`GuessState`, `RoundsState`, `WindowSizeDraftState`). Use cases and adapters are not services. | `make…` use case, `…Gateway`, `…Repository` |
 | `View` for a reactive value | A view is something drawn. A value that changes is observed. | the `ObserveX` command; "screen" or "component" for drawn things |
 | `Rx`, `LiveValue` | Stream and Effect already are those shapes. A grouping type only existed to keep two UIs equal, and the products should stay independent. | `Stream<A>` from an `ObserveX` command |
 | `Request` (Effect's `Request.TaggedClass`) | Made for batching with resolvers; its response is a value, not a `Stream`. | `Data.TaggedClass` command |
 
 ## Rules for this stack
 
-- State class: `<Thing>State` (`RoundsState`), a `Context.Service`. DOM wrapper: `Dom<Thing>` (`DomRounds`). React hook: `use<Thing>` (`useRounds`).
+- State class: `<Thing>State` (`RoundsState`), a `Context.Service`. DOM wrapper: `Dom<Thing>` (`DomRounds`, `DomWindowSizeDraft`). React hook: `use<Thing>` (`useRounds`, `useWindowSizeDraft`).
 - Command class and use case maker share one stem: `PressBit` and `makePressBit` (`make<Command>`). Do not add `Handler` or `UseCase` to either.
 - A stream is named by its observe command (`ObserveRounds`), never by a type like `RoundsRx`.
 - Commands are verbs (`PressBit`, `ResetRounds`); observe commands start with `Observe`.
