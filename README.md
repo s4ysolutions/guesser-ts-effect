@@ -156,8 +156,14 @@ flowchart TB
 
   classDef package fill:#85bbf0,stroke:#5d82a8,color:#0b2239
   classDef reference fill:#e6e6e6,stroke:#8a8a8a,color:#333333,stroke-dasharray:5 3
-  class productReact,productDom,browserReact,browserDom,state,application,storageAdapter,longestMatch,domain package
+  classDef product fill:#9fdba8,stroke:#4f8f5a,color:#0d2b14
+  classDef toolkit fill:#cfb3ee,stroke:#7a5aa6,color:#24123d
+  class state,application,storageAdapter,longestMatch,domain package
+  class productReact,productDom product
+  class browserReact,browserDom toolkit
   class jevAdapter reference
+  style products fill:#e3f5e6,stroke:#4f8f5a
+  style toolkits fill:#efe5fa,stroke:#7a5aa6
 ```
 
 The dashed arrow is the one deliberate exception to the layer rules. The grey box is the Jev adapter, which no package depends on. `@guess/core` is not drawn: it holds the bit types and the use case types, depends on nothing, and nearly every package uses it. The table has the full list.
