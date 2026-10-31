@@ -4,6 +4,8 @@ Guess is a small browser game. You press 0 or 1, and the guesser tries to predic
 
 The game is a demonstration of hexagonal architecture and DDD in a TypeScript + [Effect](https://effect.website) frontend. One domain and one application layer run under two UI toolkits, React and plain DOM, with no shared rendering code.
 
+The project delivers two things of equal value: the code, and the [agent skills](#skills) that record how it is built.
+
 ## Live demos
 
 - React: https://s4ysolutions.github.io/guesser-ts-effect/
@@ -192,4 +194,26 @@ The dashed arrow is the one deliberate exception to the layer rules. The grey bo
 - `core` has only one feature to serve today. It stays as a separate package to show where shared code goes.
 - The two toolkits repeat some code on purpose, such as the use case interface and the key handling, so each product stays independent.
 
-The design is in [the spec](docs/superpowers/specs/2026-10-23-guess-design.md). The rules for each kind of change are in `.claude/skills/`.
+The design is in [the spec](docs/superpowers/specs/2026-10-23-guess-design.md).
+
+## Skills
+
+The skills are as much a part of this project as the code. The code shows what the patterns look like. The skills say when each pattern applies, why it exists, and which mistakes it prevents. Together they open the door to further vibe coding: an AI coding agent reads the matching skill before it changes the code, so a new feature follows the established patterns instead of inventing its own.
+
+A skill is one file, `.claude/skills/<name>/SKILL.md`. Its description says when to use it, so the agent can pick the right one for the task. `AGENTS.md` holds the project decisions and tells the agent to read `hexagonal-layering` before it changes code in `packages/`.
+
+| When you | Skill |
+|---|---|
+| Decide which layer or domain group something belongs in | [`hexagonal-layering`](.claude/skills/hexagonal-layering/SKILL.md) |
+| Add a feature, or look for the right folder and package | [`effect-feature-layout`](.claude/skills/effect-feature-layout/SKILL.md) |
+| Create or split a package, or add a dependency between packages | [`package-per-layer`](.claude/skills/package-per-layer/SKILL.md) |
+| Add or change a use case | [`effect-usecase-command`](.claude/skills/effect-usecase-command/SKILL.md) |
+| Decide where state lives, and how to load and save it | [`effect-app-state`](.claude/skills/effect-app-state/SKILL.md) |
+| Decide if something gets a tag and a Layer | [`when-to-use-layer`](.claude/skills/when-to-use-layer/SKILL.md) |
+| Connect use cases to a UI toolkit | [`effect-ui-bridges`](.claude/skills/effect-ui-bridges/SKILL.md) |
+| Add several adapters behind one port | [`gateway-multi-adapter`](.claude/skills/gateway-multi-adapter/SKILL.md) |
+| Choose between a default adapter and one passed in by the product | [`adapter-wiring-modes`](.claude/skills/adapter-wiring-modes/SKILL.md) |
+| Write or change a product's wiring | [`effect-composition-root`](.claude/skills/effect-composition-root/SKILL.md) |
+| Name a type, hook, class or file | [`naming-without-false-hints`](.claude/skills/naming-without-false-hints/SKILL.md) |
+
+To start a new feature, ask your agent for it in plain words. The skills give it the layers, the file layout and the rules. Keep them current: when a pattern changes, change its skill in the same commit.
