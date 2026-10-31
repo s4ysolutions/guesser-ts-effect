@@ -10,7 +10,7 @@ One owner per state. Rules about the state go in the domain (`hexagonal-layering
 | Kind | Lives in | Example |
 |---|---|---|
 | Live game state | `application`, a `Context.Service` of `SubscriptionRef`s | `GuessState`, `RoundsState` |
-| Rules about that state | `domain`, pure functions | `clampWindowSize`, `progressForRequest`, `takeGuess`, `appendRound` |
+| Rules about that state | `domain`, operations (pure) and workflows (with ports) | `clampWindowSize`, `progressForRequest`, `takeGuess`, `recordRound` |
 | Saved copy | behind a port declared in `domain` | `RoundsRepository`, `WindowSizeRepository` |
 | UI-only state | `presentation/state`, same service shape | `WindowSizeDraftState` |
 
@@ -30,7 +30,7 @@ export class GuessState extends Context.Service<GuessState, {
 ```
 
 - It is **not a port**. No second implementation is expected.
-- The state holds values only. The rules that change them (`progressForRequest`, `takeGuess`, `windowSizeFor`) are domain functions that the use cases call. A state file with rules or storage calls is a red flag.
+- The state holds values only. The rules that change them (`progressForRequest`, `takeGuess`, `changeWindowSize`) are domain operations and workflows that the use cases call. A state file with rules or storage calls is a red flag.
 - Use cases take `GuessState["Service"]` as a constructor argument.
 - The state owns its **lock** (1-permit `Semaphore`) and any **fiber handle**. See `effect-usecase-command`.
 - Observe use cases return `SubscriptionRef.changes(ref)` (current value first). When the UI may not see everything, the observe use case calls a domain function: `makeObserveGuessStatus` maps `GuessProgress` through `publicStatus`, which drops the guess so the UI cannot show it before the press.
@@ -40,10 +40,10 @@ export class GuessState extends Context.Service<GuessState, {
 
 Both saved values have a port in the domain, an adapter in `adapter-local-storage`, and the product passes the adapter in (`adapter-wiring-modes`):
 
-- `RoundsRepository { load: Effect<Rounds>; save(rounds): Effect<void> }`. `RoundsState.layer({ repository })` loads once at start. `PressBit` and `ResetRounds` save after each change.
-- `WindowSizeRepository { load: Effect<number>; save(n): Effect<void> }`. `GuessState.layer({ windowSizeRepository })` loads once at start. `SetWindowSize` saves after each change.
+- `RoundsRepository { load: Effect<Rounds>; save(rounds): Effect<void> }`. `RoundsState.layer({ repository })` loads once at start. `PressBit` saves through the `recordRound` workflow and writes the ref with the rounds it returns. `ResetRounds` calls `repository.save([])` itself: one port call, no rule.
+- `WindowSizeRepository { load: Effect<number>; save(n): Effect<void> }`. `GuessState.layer({ windowSizeRepository })` loads once at start. `SetWindowSize` saves through the `changeWindowSize` workflow, then writes the ref.
 
-The state loads once, then lives in memory in the ref. Observe never reads the repository. `load` and `save` have error type `never`: the adapter handles bad data (rounds: empty list plus a backup key; size: the default) and failed writes (ignored), so storage never blocks the UI. Each rule for a stored value (is `7` a valid size?) is a domain function the adapter calls (`isWindowSize`).
+The state loads once, then lives in memory in the ref. Observe never reads the repository. `load` and `save` have error type `never`: the adapter handles bad data (rounds: empty list plus a backup key; size: the default) and failed writes (ignored), so storage never blocks the UI. Each rule for a stored value (is `7` a valid size?) is a domain operation the adapter calls (`isWindowSize`).
 
 Ask before adding a port: "what second implementation, or fake for tests, would I write?" Here the answer is a fake storage for tests and a different store later, and the port also keeps `localStorage` out of application.
 

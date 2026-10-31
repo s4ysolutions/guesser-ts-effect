@@ -39,9 +39,8 @@ export const makePressBit = (deps: {
     roundsState.lock.withPermits(1)(Effect.gen(function*() {
       const guess = yield* takeGuess(new TakeGuess())
       const current = yield* SubscriptionRef.get(roundsState.rounds)
-      const next = appendRound(current, command.bit, guess)
+      const next = yield* recordRound(repository, current, command.bit, guess)
       yield* SubscriptionRef.set(roundsState.rounds, next)
-      yield* repository.save(next)
       yield* requestGuess(new RequestGuess({ bits: bitsOf(next) }))
     }))
 }
@@ -49,19 +48,18 @@ export const makePressBit = (deps: {
 
 ## The body of a use case
 
-A use case body has four kinds of step and nothing else: read the state, call a domain function, write the state, call a port. `makePressBit` above is the shape. The rule for `if` is in `hexagonal-layering`: it may only stop on what a domain function returned. `makeSetWindowSize` shows it:
+The body is the machinery around one domain call: take the lock, read the live state, call one domain operation or workflow, write the result to the live state. The full rule, and what to do with an `if` or a second port call, is in `hexagonal-layering` ("Use case shape"). `makePressBit` above is the shape: `recordRound` is a workflow that appends the round and saves it, and the use case writes the returned rounds to the ref. `makeSetWindowSize` shows stopping on the domain answer:
 
 ```ts
-const n = windowSizeFor(command.n)   // domain: clamps, or null when not a number
-if (n === null) return               // stops on the domain answer
-yield* guessState.lock.withPermits(1)(Effect.gen(function*() {
+guessState.lock.withPermits(1)(Effect.gen(function*() {
+  const n = yield* changeWindowSize(windowSizeRepository, command.n)  // workflow: clamps and saves
+  if (n === null) return                                              // stops on the domain answer
   yield* SubscriptionRef.set(guessState.windowSize, n)
-  yield* windowSizeRepository.save(n)   // port
   ...
 }))
 ```
 
-An `if` that decides a business outcome (a status move, a limit) is a domain function instead (`progressForRequest`, `takeGuess`).
+`makeResetRounds` calls `repository.save([])` itself: one port call with no rule around it. A business `if` (a status move, a limit) is a domain function (`progressForRequest`, `takeGuess`).
 
 ## Rules (each one was a real mistake)
 
@@ -69,9 +67,9 @@ An `if` that decides a business outcome (a status move, a limit) is a domain fun
 2. **Constructor deps use `X["Service"]`**, not `X`. In Effect 4 the class type is the tag key, not the service value. `roundsState: RoundsState` does not compile against the value you get from the runtime.
 3. **A plain function, not an Effect, not a Layer.** `makeX(deps): UseCase<X>` is called once by the composition root. No tag, no `Layer`, no `makeX` that returns `Effect`.
 4. **Every dependency is a constructor argument.** No hidden lookup (a WeakMap keyed by the state was tried and rejected). A test can then see all deps in the signature. Other features' use cases come in as `UseCase<TheirCommand>`.
-5. **`R = never` and error `never`.** Never put `RoundsState` in `R`. Failures become state that an `ObserveX` shows (`Failed` status), not an error the UI must catch. Bad input is either ignored (a no-op, when the domain function answers `null`, like `windowSizeFor` in `SetWindowSize`) or clamped by the domain. If the UI must show the problem, add a field to the state; do not add `E`.
+5. **`R = never` and error `never`.** Never put `RoundsState` in `R`. Failures become state that an `ObserveX` shows (`Failed` status), not an error the UI must catch. Bad input is either ignored (a no-op, when the domain answers `null`, like `changeWindowSize` in `SetWindowSize`) or clamped by the domain. If the UI must show the problem, add a field to the state; do not add `E`.
 6. **Observe returns `Stream`, command returns `Effect`.** `SubscriptionRef.changes` emits the current value first, then each change. Name them `ObserveX`.
-7. **The domain owns validation and clamping.** `SetWindowSize` passes `n` to `windowSizeFor`, which clamps and rounds it; the UI sends what the user typed (parsed to a number).
+7. **The domain owns validation and clamping.** `SetWindowSize` passes `n` to `changeWindowSize`, which clamps, rounds and saves it; the UI sends what the user typed (parsed to a number).
 8. **Concurrent commands need a lock.** UI bridges start each command as its own fiber. A command that reads then writes state, or issues requests in order, must run under a 1-permit `Semaphore` that the **state service owns** (`roundsState.lock`, `guessState.lock`), made in the state's Layer. State that only one command writes, like the window size draft, needs no lock. `SubscriptionRef.updateEffect` is not enough when the body also calls other use cases.
 9. **No re-entrant locking.** `Semaphore` is not re-entrant. If two commands share a step, extract an unlocked internal function (`startGuess` in `guess/request.ts`, not exported from `index.ts`; `RequestGuess` and `SetWindowSize` both call it) and call it while holding the permit.
 10. **Stale async result:** before setting `Thinking`, call `FiberHandle.clear(state.fiber)`. It waits for the old fiber to exit, so the old guess cannot write after the new state.

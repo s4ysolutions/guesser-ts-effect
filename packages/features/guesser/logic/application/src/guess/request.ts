@@ -1,8 +1,7 @@
 import { Data, Effect, FiberHandle, SubscriptionRef } from "effect"
-import { lastN } from "@guess/core"
 import type { Bits, UseCase } from "@guess/core"
 import { makeLongestMatchGateway } from "@guess/guesser-adapter-longest-match"
-import { progressAfterFailure, progressAfterSuccess, progressForRequest } from "@guess/guesser-domain"
+import { fetchGuess, progressForRequest } from "@guess/guesser-domain"
 import type { GuessGateway } from "@guess/guesser-domain"
 import type { GuessState } from "./state.ts"
 
@@ -28,11 +27,8 @@ export const startGuess = (
     const n = yield* SubscriptionRef.get(guessState.windowSize)
     yield* FiberHandle.run(
       guessState.fiber,
-      gateway.guess(lastN(bits, n)).pipe(
-        Effect.matchEffect({
-          onSuccess: (guess) => SubscriptionRef.set(guessState.status, progressAfterSuccess(guess)),
-          onFailure: (error) => SubscriptionRef.set(guessState.status, progressAfterFailure(error)),
-        }),
+      fetchGuess(gateway, bits, n).pipe(
+        Effect.flatMap((progress) => SubscriptionRef.set(guessState.status, progress)),
       ),
     )
   })

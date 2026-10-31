@@ -7,16 +7,16 @@ description: Use when one port needs several adapters, such as a local algorithm
 
 Language-neutral idea from vocabla-mill `client-gateway-port` and `client-gateway-jvm-contract-test`: the port speaks domain words only; each adapter maps its own world to them. Code is TS + Effect.
 
-## The port (`packages/features/guesser/logic/domain/src/guess.ts`)
+## The port (`packages/features/guesser/logic/domain/src/ports/guess-gateway.ts`)
 
 ```ts
 export interface GuessGateway {
   readonly guess: (lastBits: Bits) => Effect.Effect<Guess, GuessFailed>
 }
-export type GuessFailed = Unavailable | BadAnswer | Timeout   // Data.TaggedError
+// GuessFailed = Unavailable | BadAnswer | Timeout   (Data.TaggedError, in vo/guess-failed.ts)
 ```
 
-Nothing about algorithms or services. The port stays async (`Effect`) even though the main adapter is instant, so a remote adapter fits without change.
+Nothing about algorithms or services. The `fetchGuess` workflow (`workflows/fetch-guess.ts`) is the one caller: it asks the gateway for the last N bits and turns the result or the `GuessFailed` into a `GuessProgress`, so the use case only writes it. The port stays async (`Effect`) even though the main adapter is instant, so a remote adapter fits without change.
 
 ## Adapter 1: longest match (used by products)
 

@@ -25,12 +25,26 @@ packages/
 
 The real feature is `guesser`, with `browser-react` and `browser-dom`. The allowed imports between packages are in `package-per-layer`.
 
+## Inside `domain/src`
+
+One folder per group from `hexagonal-layering`, one file per concept. `index.ts` is the only export and re-exports all of them.
+
+```
+domain/src/
+  vo/          guess.ts, guess-failed.ts, guess-progress.ts, guess-status.ts, round.ts, score.ts, window-size.ts
+  operations/  guess-progress.ts, guess-status.ts, round.ts, score.ts, window-size.ts   (+ a .test.ts next to each)
+  ports/       guess-gateway.ts, rounds-repository.ts, window-size-repository.ts
+  workflows/   fetch-guess.ts, record-round.ts, change-window-size.ts                    (+ a .test.ts next to each)
+```
+
+There is no `entities/` folder: no type has an identity. A concept can have a file in `vo/` (the type) and a file in `operations/` (the functions on it) with the same name. `vo/` and `operations/` import only `Data` from `effect`; `scripts/check-deps.mjs` checks it.
+
 ## Layers as Effect types
 
 | Layer | Holds, in Effect terms | Example |
 |---|---|---|
 | `core` | `Bit`, `Bits`, `UseCaseCommand`, `UseCase` | `packages/core/src/usecase.ts` |
-| `domain` | plain types, pure functions, `Data.TaggedError`, ports as interfaces whose methods return `Effect` | `GuessGateway`, `clampWindowSize`, `WindowSizeRepository` |
+| `domain` | `vo/` plain types and `Data.TaggedError`; `operations/` pure functions; `workflows/` functions that take ports and return `Effect`; `ports/` interfaces whose methods return `Effect` | `Guess`, `clampWindowSize`, `fetchGuess`, `GuessGateway` |
 | `application` | `Context.Service` state + its `Layer`, commands, `make...` use cases | `GuessState`, `makePressBit` |
 | `adapter-*` | a port implementation, a plain `make...` function | `makeLongestMatchGateway`, `makeLocalStorageRoundsRepository` |
 | `presentation/state` | UI-only state (`Layer`) and its use cases, shared by all toolkits | `WindowSizeDraftState`, `makeCommitWindowSizeDraft` |
@@ -42,7 +56,7 @@ Game state (what the game needs to keep working) lives in `application`. Logic t
 ## File conventions
 
 - Each package has one `src/index.ts`, its only export.
-- Tests sit next to the code: `src/*.test.ts`.
+- Tests sit next to the code. In `domain`, a test sits next to the operation or workflow it tests (`operations/round.test.ts`). Other packages keep `src/*.test.ts`.
 - A command and its maker share a file: `rounds/press-bit.ts` holds `PressBit` and `makePressBit`.
 - Use cases of one state share a folder (`guess/`, `rounds/`, `score/` in application). The folder is the grouping; there is no grouping type.
 - State service: `<Thing>State` in `state.ts` or `<thing>-state.ts`. Adapter: `make<Tech><Port>`.
@@ -51,7 +65,7 @@ Game state (what the game needs to keep working) lives in `application`. Logic t
 
 ## Adding a feature: order
 
-1. Domain: types, rules as pure functions, ports and errors. Test the rules.
+1. Domain: value objects and errors in `vo/`, rules as operations, ports, and a workflow where a rule and a port call go together. Test operations with literal inputs and workflows with fake ports.
 2. Adapter and its test.
 3. State service in application, if there is live state.
 4. Commands and use cases, one file each (`effect-usecase-command`).

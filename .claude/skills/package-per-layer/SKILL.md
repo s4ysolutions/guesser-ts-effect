@@ -49,9 +49,10 @@ product-dom                guesser-browser-dom, guesser-state, guesser-applicati
 
 ## The check
 
-The table is a JS object in `scripts/check-deps.mjs`. `checkDeps(packages)` returns one message per violation, including "package is not in the allowed table". Only `dependencies` are checked, not dev, peer or optional. The root `test` script also runs `node --test scripts/check-deps.test.mjs`, so the negative cases run in `pnpm verify`. A new package fails the check until you add it to the table: that is the point. Mechanical rules go in the script; this skill is for the reasons.
+The table is a JS object in `scripts/check-deps.mjs`. `checkDeps(packages)` returns one message per violation, including "package is not in the allowed table". Only `dependencies` are checked, not dev, peer or optional. The root `test` script also runs `node --test scripts/check-deps.test.mjs`, so the negative cases run in `pnpm verify`. A new package fails the check until you add it to the table: that is the point. The script has a second check, `checkDomainEffectImports`: every non-test file under `*/domain/src/vo` and `*/domain/src/operations` may import only `Data` from `effect`, `import type` included. It prints the file and the imported name. Workflows and ports may import more. Mechanical rules go in the script; this skill is for the reasons.
 
 ## Red flags
 
 - Editing the table to make a failing check pass without asking if the import is right.
 - A domain package with `react` or an adapter in `dependencies`.
+- `Effect`, `Option` or another `effect` import in `vo/` or `operations/`: the check fails. Move the code to `workflows/` or `ports/`.

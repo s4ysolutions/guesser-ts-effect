@@ -1,12 +1,6 @@
 import { describe, expect, test } from "vitest"
-import {
-  clampWindowSize,
-  isWindowSize,
-  WINDOW_SIZE_DEFAULT,
-  WINDOW_SIZE_MAX,
-  WINDOW_SIZE_MIN,
-  windowSizeFor,
-} from "./index.ts"
+import { WINDOW_SIZE_DEFAULT, WINDOW_SIZE_MAX, WINDOW_SIZE_MIN } from "../vo/window-size.ts"
+import { clampWindowSize, isWindowSize, windowSizeFor } from "./window-size.ts"
 
 describe("window size limits", () => {
   test("the default is inside the limits", () => {

@@ -1,13 +1,5 @@
-import type { Rounds } from "./round.ts"
-
-export interface Score {
-  readonly hits: number
-  readonly guessed: number
-  readonly total: number
-  /** Rounds that got no guess: `total - guessed`. */
-  readonly unguessed: number
-  readonly ratio: number
-}
+import type { Rounds } from "../vo/round.ts"
+import type { Score } from "../vo/score.ts"
 
 export const scoreOf = (rounds: Rounds): Score => {
   let hits = 0

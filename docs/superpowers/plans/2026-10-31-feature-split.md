@@ -129,3 +129,19 @@ Update every skill in `.claude/skills/` that names old paths, packages or rules,
 ## Step F: final check (Sonnet review)
 
 Review all changes against `hexagonal-layering`. Run `pnpm verify`. Check both products in the browser.
+
+## Step G: domain groups (Sonnet)
+
+Split `packages/features/guesser/logic/domain/src` by the groups in `hexagonal-layering`:
+
+- `vo/`: `Guess`, `GuessFailed` and its errors, `GuessProgress`, `GuessStatus`, `Round`, `Rounds`, `Score`, `WINDOW_SIZE_*`.
+- `operations/`: `clampWindowSize`, `isWindowSize`, `windowSizeFor`, `progressForRequest`, `progressAfterSuccess`, `progressAfterFailure`, `takeGuess`, `publicStatus`, `makeRound`, `appendRound`, `bitsOf`, `scoreOf`.
+- `ports/`: `GuessGateway`, `RoundsRepository`, `WindowSizeRepository`.
+- `workflows/`, with ports as parameters:
+  - `fetchGuess(gateway, bits, n): Effect<GuessProgress>`: asks the gateway for the last N bits and maps the result to progress.
+  - `recordRound(repository, rounds, bit, guess): Effect<Rounds>`: appends the round and saves.
+  - `changeWindowSize(repository, requested): Effect<number | null>`: gets the size from the operation and saves. NaN saves nothing and returns null.
+
+No `entities/` folder: no type has identity.
+
+`vo/` and `operations/` may import only `Data` from `effect`. `scripts/check-deps.mjs` enforces it.

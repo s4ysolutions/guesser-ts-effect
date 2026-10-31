@@ -102,7 +102,8 @@ packages/
     logic/
       domain/                           @guess/guesser-domain
                                         every rule, the types the rules use, and the ports
-                                        (GuessGateway, RoundsRepository, WindowSizeRepository)
+                                        (GuessGateway, RoundsRepository, WindowSizeRepository).
+                                        Folders: vo/, operations/, ports/, workflows/ (see 5.2)
       application/                      @guess/guesser-application
                                         use case constructors + GuessState and RoundsState
                                         layers (creates longest-match)  ← gateway self-contained,
@@ -160,9 +161,12 @@ Only UI-only logic is in presentation/state.
   a `SubscriptionRef`, built once by a `Layer` (its creation is effectful, see 4.6). It is
   not a port. Its shape is internal: only the feature's own use case constructors read or
   write the ref. The product sees it only as a value to pass into those constructors.
-- The rules for this state are **domain functions**: limits and defaults, clamping the window
-  size, the allowed moves of the guess status, what the UI may see. They take values and
-  return values. Application reads the state, calls them and writes the result.
+- The rules for this state are **domain operations and workflows**: limits and defaults,
+  clamping the window size, the allowed moves of the guess status, what the UI may see.
+  An operation takes values and returns values. A workflow takes ports as parameters and
+  returns an `Effect`; it holds the rule and the port call together (for example
+  `recordRound` appends a round and saves it). Application reads the state, calls one of
+  them and writes the result.
 - Saving and loading go through a **repository port** declared in domain. The live state
   loads from the repository at start and saves on change. There are two ports:
   `RoundsRepository` and `WindowSizeRepository`. The window size is saved through
@@ -179,10 +183,14 @@ The same pattern as the vocabla-mill backend (`usecase-command` skill), mapped t
 - The UI layers (presentation/state and the toolkit packages) depend only on `UseCase<C>`.
   Dependencies (state services, ports, other use cases) are arguments of the use case's
   **plain constructor function**, so they never appear in the use case's type.
-- The **use case body** has exactly these parts: read the state, call a domain function,
-  write the state, call ports. Every `if` that chooses a business outcome is a domain
-  function that takes values and returns the outcome. Guards about the machinery stay in
-  application: a lock, a cancelled fiber, skipping a stale result.
+- The **use case body** is the machinery around one domain call: take the lock, read the
+  live state, call one domain operation or one domain workflow, write the result to the live
+  state. It may stop on what that call returned (for example `null`). Every `if` that chooses
+  a business outcome is a domain operation. A second port call, an operation on the result
+  or a domain error means a workflow in domain. A use case may call a port itself only for
+  one call with no rule around it (`ResetRounds` calls `repository.save([])`). Guards about
+  the machinery stay in application: a lock, a cancelled fiber, skipping a stale result.
+  The full rule is in the `hexagonal-layering` skill.
 
 Core types (no Effect import):
 
@@ -211,9 +219,10 @@ export const makePressBit = (deps: {
 }): UseCase<PressBit> => (command) => /* Effect.gen(…) */
 ```
 
-The body of `makePressBit` follows the shape above: take the guess (a use case), call the
-domain function that appends the round, write `roundsState`, save through the repository,
-request the next guess.
+The body of `makePressBit` follows the shape above, under the rounds lock: take the guess (a
+use case), call the workflow `recordRound(repository, rounds, bit, guess)` (it appends the
+round and saves, and returns the new rounds), write the returned rounds to `roundsState`,
+request the next guess. The ref is written after the save.
 
 No tag and no `Layer` for use cases: they have a plain constructor and nothing to release.
 
@@ -340,13 +349,37 @@ the rule and the reason, so the code does not read as "they did not know Layers"
 One feature. The gateway is self-contained; the repositories are open (see 2).
 
 **Domain**
+
+The domain is split by group (`hexagonal-layering`). One file per concept; tests sit next to
+the operation or workflow they test. There is no `entities/` folder, because no type has an
+identity.
+
+```
+domain/src/
+  vo/          guess, guess-failed, guess-progress, guess-status, round, score, window-size
+  operations/  guess-progress, guess-status, round, score, window-size
+  ports/       guess-gateway, rounds-repository, window-size-repository
+  workflows/   fetch-guess, record-round, change-window-size
+```
+
+`vo/` and `operations/` import only `Data` from `effect`. `scripts/check-deps.mjs` checks it.
+
+Value objects (`vo/`):
 - `Guess = { bit: Bit; confidence?: number }` (`confidence` 0..1, optional so an adapter
   can leave it out).
 - `GuessFailed`: tagged errors `Unavailable`, `BadAnswer`, `Timeout`.
+- `GuessProgress` and `GuessStatus` (below), `Round`, `Rounds`, `Score` (below), and the
+  constants `WINDOW_SIZE_DEFAULT` (32), `WINDOW_SIZE_MIN` (1), `WINDOW_SIZE_MAX` (256).
+
+Ports (`ports/`):
 - Port `GuessGateway`: `guess(lastBits: Bits) => Effect<Guess, GuessFailed>`. Nothing about
   any algorithm or service. The port stays async (`Effect`) even though the main adapter is
   instant, so a remote adapter fits without change.
-- Guess status rules (`guess-status`). The internal union `GuessProgress` is
+- Port `RoundsRepository`: `load: Effect<Rounds>`, `save(rounds): Effect<void>`.
+- Port `WindowSizeRepository`: `load: Effect<number>`, `save(n): Effect<void>`.
+
+Operations (`operations/`, pure functions):
+- Guess status rules. The internal union `GuessProgress` is
   `idle | thinking | ready(Guess) | failed(GuessFailed)`. The public `GuessStatus` is the
   same without the bit. Pure functions give:
   - the progress for a new request: no bits gives `idle`, otherwise `thinking`;
@@ -354,15 +387,22 @@ One feature. The gateway is self-contained; the repositories are open (see 2).
   - taking the guess: the guess and the next progress, or `null` and the same progress;
   - `publicStatus(progress)`, which drops the bit, so a UI cannot show the guess before
     the press.
-- Window size rules (`window-size`): `WINDOW_SIZE_DEFAULT` (32), `WINDOW_SIZE_MIN` (1),
-  `WINDOW_SIZE_MAX` (256), `clampWindowSize`, `isWindowSize`. Port `WindowSizeRepository`:
-  `load: Effect<number>`, `save(n): Effect<void>`.
-- `Round = { bit: Bit; guess: Bit | null; hit: boolean | null }` (`null` = no guess was ready).
-  A pure function appends a new round to `Rounds`.
-- `Rounds`: ordered list of rounds.
-- `Score = { hits, guessed, total, unguessed, ratio }`: `guessed` = rounds with a guess,
-  `total` = all rounds, `unguessed = total - guessed` (computed in `scoreOf`), `ratio = hits / guessed` (0 when `guessed` is 0).
-- Port `RoundsRepository`: `load: Effect<Rounds>`, `save(rounds): Effect<void>`.
+- Window size rules: `clampWindowSize`, `isWindowSize`, `windowSizeFor` (the size for a
+  requested number, or `null` for NaN).
+- Rounds: `makeRound`, `bitsOf`, and `appendRound`, which appends a new round to `Rounds`.
+  `Round = { bit: Bit; guess: Bit | null; hit: boolean | null }` (`null` = no guess was
+  ready). `Rounds` is an ordered list of rounds.
+- `scoreOf(rounds)` gives `Score = { hits, guessed, total, unguessed, ratio }`: `guessed` =
+  rounds with a guess, `total` = all rounds, `unguessed = total - guessed`,
+  `ratio = hits / guessed` (0 when `guessed` is 0).
+
+Workflows (`workflows/`, ports as parameters, tested with fake ports):
+- `fetchGuess(gateway, bits, n): Effect<GuessProgress>` asks the gateway for the last `n`
+  bits and maps the result or the failure to a progress.
+- `recordRound(repository, rounds, bit, guess): Effect<Rounds>` appends the round, saves,
+  and returns the new rounds.
+- `changeWindowSize(repository, requested): Effect<number | null>` gets the size from
+  `windowSizeFor` and saves it. NaN saves nothing and gives `null`.
 
 **Application — internal state**
 - `GuessState`: a `GuessProgress` and the window size N (how many last bits the gateway
@@ -373,22 +413,25 @@ One feature. The gateway is self-contained; the repositories are open (see 2).
 **Application — use cases** (command → response)
 - `ObserveGuessStatus` → `Stream<GuessStatus>` — status **without the bit**
   (`idle | thinking | ready | failed(reason)`), made by `publicStatus`.
-- `RequestGuess { bits }` → `Effect<void>` — takes `lastN(N)`, starts the guess in a
-  background fiber, interrupts the previous one if it still runs. Does not wait. With zero
+- `RequestGuess { bits }` → `Effect<void>` — starts a background fiber that runs
+  `fetchGuess(gateway, bits, N)` and writes the returned progress to the status; interrupts
+  the previous fiber if it still runs. Does not wait. With zero
   bits it does nothing and the status stays `idle`.
 - `TakeGuess` → `Effect<Guess | null>` — returns the ready guess and sets state to `idle`;
   `null` if not ready.
 - `SetWindowSize { n }` → `Effect<void>`, `ObserveWindowSize` → `Stream<number>`. The size
-  is checked and clamped by domain functions and saved through `WindowSizeRepository`.
+  is checked, clamped and saved by the workflow `changeWindowSize`; on `null` the use case stops,
+  otherwise it writes the size to the state and starts a new guess.
   Changing N interrupts a running guess, drops a ready one, and requests a new guess with
   the current bits.
 - `ObserveRounds` → `Stream<Rounds>`
 - `ObserveScore` → `Stream<Score>` (derived from rounds)
 - `PressBit { bit }` → `Effect<void>`:
   1. `TakeGuess`,
-  2. append the round (domain function), save,
+  2. `recordRound` (appends the round and saves), then write the returned rounds to the state,
   3. `RequestGuess` with all bits.
-- `ResetRounds` → `Effect<void>` — empties rounds, saves, status goes back to `idle`.
+- `ResetRounds` → `Effect<void>` — empties rounds, saves (`repository.save([])`: one port
+  call with no rule, so no workflow), status goes back to `idle`.
 - At start: `GuessState.layer` loads the saved window size and `RoundsState.layer` loads the
   saved rounds; the product then requests the first guess.
 - Locks, the guess fiber and the order "clear the guess before `thinking`" stay in
@@ -477,10 +520,12 @@ not need to keep working. It imports only `guesser-application`.
 
 ## 7. Testing
 
-- Domain and longest-match: plain unit tests, no mocks (score maths, `lastN`, window size
-  limits and clamping, guess status moves and `publicStatus`, appending a round, the
-  algorithm on known sequences: e.g. `0101010` → `1`, a repeated pattern is learned,
+- Domain operations and longest-match: plain unit tests, no mocks (score maths, `lastN`,
+  window size limits and clamping, guess status moves and `publicStatus`, appending a round,
+  the algorithm on known sequences: e.g. `0101010` → `1`, a repeated pattern is learned,
   fallback rules).
+- Domain workflows: unit tests with fake ports (`fetchGuess` with a fake gateway,
+  `recordRound` and `changeWindowSize` with a fake repository that records its saves).
 - Application: Vitest with Effect, using a test `GuessGateway` (slow, failing, fixed) and
   in-memory `RoundsRepository` and `WindowSizeRepository` values. Cover: press while
   thinking (old fiber interrupted, round has no guess), failure becomes state, reset,

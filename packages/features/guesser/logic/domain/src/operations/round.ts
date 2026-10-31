@@ -1,13 +1,6 @@
 import type { Bit, Bits } from "@guess/core"
-import type { Guess } from "./guess.ts"
-
-export interface Round {
-  readonly bit: Bit
-  readonly guess: Bit | null
-  readonly hit: boolean | null
-}
-
-export type Rounds = ReadonlyArray<Round>
+import type { Guess } from "../vo/guess.ts"
+import type { Round, Rounds } from "../vo/round.ts"
 
 export const makeRound = (bit: Bit, guess: Bit | null): Round => ({
   bit,
