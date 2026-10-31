@@ -10,7 +10,7 @@ import {
   makeObserveWindowSizeDraft,
   ObserveWindowSizeDraft,
   WindowSizeDraftState,
-} from "./index.ts"
+} from "../index.ts"
 
 const settle = Effect.sleep("5 millis")
 

@@ -1,6 +1,7 @@
 import { Data, Stream, SubscriptionRef } from "effect"
 import type { UseCase } from "@guess/core"
 import { ObserveWindowSize } from "@guess/guesser-application"
+import { windowSizeFieldText } from "../operations/window-size-draft.ts"
 import type { WindowSizeDraftState } from "./window-size-draft-state.ts"
 
 export class ObserveWindowSizeDraft extends Data.TaggedClass("ObserveWindowSizeDraft")<{}> {
@@ -16,5 +17,5 @@ export const makeObserveWindowSizeDraft = (deps: {
   Stream.zipLatestWith(
     SubscriptionRef.changes(deps.draftState.draft),
     deps.observeWindowSize(new ObserveWindowSize()),
-    (draft, size) => draft ?? String(size),
+    windowSizeFieldText,
   )
