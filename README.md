@@ -4,6 +4,13 @@ Guess is a small browser game. You press 0 or 1, and the guesser tries to predic
 
 The game is a demonstration of hexagonal architecture and DDD in a TypeScript + [Effect](https://effect.website) frontend. One domain and one application layer run under two UI toolkits, React and plain DOM, with no shared rendering code.
 
+## Live demos
+
+- React: https://s4ysolutions.github.io/guesser-ts-effect/
+- Plain DOM: https://s4ysolutions.github.io/guesser-ts-effect/dom/
+
+GitHub Actions builds both from `main` and publishes them to GitHub Pages (see `.github/workflows/pages.yml`).
+
 ## Run
 
 ```bash
